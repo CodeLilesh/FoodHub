@@ -1,26 +1,25 @@
 const { Pool } = require('pg');
+require('dotenv').config();
 
-// Create pool using environment variables
+// Get database URL from environment variables or use default
+const dbUrl = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_ordering';
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    require: true,
-    rejectUnauthorized: false
-  }
+  connectionString: dbUrl,
+  ssl: process.env.NODE_ENV === 'production' 
+    ? { rejectUnauthorized: false }
+    : false
 });
 
-// Test connection
-pool.connect((err, client, release) => {
+// Test the database connection
+pool.query('SELECT NOW()', (err, res) => {
   if (err) {
-    console.error('Error connecting to database:', err.stack);
+    console.error('Error connecting to PostgreSQL database:', err);
   } else {
     console.log('Connected to PostgreSQL database');
-    release();
   }
 });
 
-// Export query method
 module.exports = {
-  query: (text, params) => pool.query(text, params),
-  pool
+  query: (text, params) => pool.query(text, params)
 };

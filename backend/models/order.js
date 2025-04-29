@@ -12,7 +12,7 @@ class Order {
       // Create order
       const orderQuery = `
         INSERT INTO orders (
-          user_id, restaurant_id, total_price, delivery_address, 
+          user_id, restaurant_id, total_amount, delivery_address, 
           payment_method, status, special_instructions, created_at
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -22,7 +22,7 @@ class Order {
       const orderValues = [
         user_id,
         restaurant_id,
-        total_price,
+        total_price, // Using total_price from input but mapping to total_amount column
         delivery_address,
         payment_method,
         'pending', // Initial status
@@ -213,7 +213,7 @@ class Order {
           COUNT(CASE WHEN status = 'ready' THEN 1 END) as ready_orders,
           COUNT(CASE WHEN status = 'delivered' THEN 1 END) as delivered_orders,
           COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_orders,
-          SUM(total_price) as total_revenue
+          SUM(total_amount) as total_revenue
         FROM orders
         WHERE created_at >= NOW() - INTERVAL '30 days'
       `;

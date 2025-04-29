@@ -169,18 +169,25 @@ router.post('/admin/login', async (req, res) => {
     
     // Check if user exists
     const user = await User.findByEmail(email);
+    console.log('Login attempt for:', email);
     
     if (!user) {
+      console.log('User not found');
       return res.status(400).json({ success: false, message: 'Invalid credentials' });
     }
     
+    console.log('User found, role:', user.role);
+    
     // Check if user is admin
     if (user.role !== 'admin') {
+      console.log('Not an admin user');
       return res.status(403).json({ success: false, message: 'Unauthorized: Admin access required' });
     }
     
     // Check password
+    console.log('Checking password...');
     const isMatch = await bcrypt.compare(password, user.password);
+    console.log('Password match:', isMatch);
     
     if (!isMatch) {
       return res.status(400).json({ success: false, message: 'Invalid credentials' });

@@ -38,10 +38,22 @@ router.get('/dashboard', [auth, admin], async (req, res) => {
       restaurantCount
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error getting order statistics:', error);
     res.status(500).render('admin/dashboard', {
       title: 'Admin Dashboard',
-      error: 'Failed to load dashboard data'
+      error: 'Failed to load dashboard data',
+      stats: {
+        total_orders: 0,
+        pending_orders: 0,
+        confirmed_orders: 0,
+        preparing_orders: 0,
+        ready_orders: 0,
+        delivered_orders: 0,
+        cancelled_orders: 0,
+        total_revenue: 0
+      },
+      recentOrders: [],
+      restaurantCount: 0
     });
   }
 });
