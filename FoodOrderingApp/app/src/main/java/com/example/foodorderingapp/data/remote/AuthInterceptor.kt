@@ -5,31 +5,31 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
+import javax.inject.Inject
 
-class AuthInterceptor(private val sessionManager: SessionManager) : Interceptor {
-    
+/**
+ * Interceptor to add auth token to requests
+ */
+class AuthInterceptor @Inject constructor(
+    private val sessionManager: SessionManager
+) : Interceptor {
+
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
         
-        // Skip interceptor for auth endpoints
-        if (originalRequest.url.toString().contains("auth/login") || 
-            originalRequest.url.toString().contains("auth/register")) {
-            return chain.proceed(originalRequest)
+        // Get token from DataStore (must be done in a blocking way here)
+        val token = runBlocking {
+            sessionManager.authToken.first()
         }
         
-        // Get token from SessionManager - need to use runBlocking as Interceptor doesn't support suspend functions
-        val token = runBlocking { sessionManager.authToken.first() }
-        
-        // Proceed with original request if no token
-        if (token.isNullOrEmpty()) {
-            return chain.proceed(originalRequest)
+        // If token is present, add it to request header
+        return if (!token.isNullOrEmpty()) {
+            val newRequest = originalRequest.newBuilder()
+                .header("Authorization", "Bearer $token")
+                .build()
+            chain.proceed(newRequest)
+        } else {
+            chain.proceed(originalRequest)
         }
-        
-        // Add Authorization header with token
-        val newRequest = originalRequest.newBuilder()
-            .header("Authorization", "Bearer $token")
-            .build()
-            
-        return chain.proceed(newRequest)
     }
 }

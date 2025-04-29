@@ -1,11 +1,17 @@
 package com.example.foodorderingapp.data.local
 
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
 import com.example.foodorderingapp.data.model.CartItem
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CartDao {
+    
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCartItem(cartItem: CartItem): Long
     
@@ -18,48 +24,33 @@ interface CartDao {
     @Query("SELECT * FROM cart_items")
     fun getAllCartItems(): Flow<List<CartItem>>
     
-    @Query("SELECT * FROM cart_items WHERE id = :cartItemId")
-    suspend fun getCartItemById(cartItemId: Int): CartItem?
+    @Query("SELECT * FROM cart_items WHERE id = :id")
+    suspend fun getCartItemById(id: Long): CartItem?
     
     @Query("SELECT * FROM cart_items WHERE menuItemId = :menuItemId")
-    suspend fun getCartItemByMenuItemId(menuItemId: Int): CartItem?
+    suspend fun getCartItemByMenuItemId(menuItemId: String): CartItem?
+    
+    @Query("SELECT * FROM cart_items WHERE restaurantId = :restaurantId")
+    fun getCartItemsByRestaurant(restaurantId: String): Flow<List<CartItem>>
     
     @Query("SELECT COUNT(*) FROM cart_items")
     fun getCartItemCount(): Flow<Int>
     
     @Query("SELECT SUM(price * quantity) FROM cart_items")
-    fun getCartTotal(): Flow<Double?>
+    fun getCartTotalPrice(): Flow<Double?>
     
-    @Query("SELECT DISTINCT restaurantId FROM cart_items LIMIT 1")
-    suspend fun getCartRestaurantId(): Int?
+    @Query("UPDATE cart_items SET quantity = :quantity WHERE id = :id")
+    suspend fun updateCartItemQuantity(id: Long, quantity: Int)
     
-    @Query("DELETE FROM cart_items WHERE id = :cartItemId")
-    suspend fun deleteCartItemById(cartItemId: Int)
+    @Query("DELETE FROM cart_items WHERE id = :id")
+    suspend fun deleteCartItemById(id: Long)
     
     @Query("DELETE FROM cart_items")
     suspend fun clearCart()
     
-    @Transaction
-    suspend fun addOrUpdateCartItem(cartItem: CartItem): Long {
-        val existingItem = getCartItemByMenuItemId(cartItem.menuItemId)
-        
-        return if (existingItem != null) {
-            val updatedItem = existingItem.copy(
-                quantity = existingItem.quantity + cartItem.quantity,
-                instructions = cartItem.instructions ?: existingItem.instructions
-            )
-            updateCartItem(updatedItem)
-            existingItem.id.toLong()
-        } else {
-            insertCartItem(cartItem)
-        }
-    }
+    @Query("DELETE FROM cart_items WHERE restaurantId = :restaurantId")
+    suspend fun clearCartByRestaurant(restaurantId: String)
     
-    @Transaction
-    suspend fun validateRestaurantBeforeInsert(cartItem: CartItem): Boolean {
-        val currentRestaurantId = getCartRestaurantId()
-        
-        // If cart is empty or item is from the same restaurant, proceed
-        return currentRestaurantId == null || currentRestaurantId == cartItem.restaurantId
-    }
+    @Query("SELECT DISTINCT restaurantId FROM cart_items LIMIT 1")
+    suspend fun getCurrentRestaurantId(): String?
 }

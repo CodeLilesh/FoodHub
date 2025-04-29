@@ -1,67 +1,78 @@
 package com.example.foodorderingapp.data.remote
 
-import com.example.foodorderingapp.data.model.MenuItem
+import com.example.foodorderingapp.data.model.LoginRequest
+import com.example.foodorderingapp.data.model.RegisterRequest
+import com.example.foodorderingapp.data.model.User
+import com.example.foodorderingapp.data.model.AuthResponse
+import com.example.foodorderingapp.data.model.OrderRequest
 import com.example.foodorderingapp.data.model.Order
 import com.example.foodorderingapp.data.model.Restaurant
-import com.example.foodorderingapp.data.model.User
+import com.example.foodorderingapp.data.model.MenuItem
 import retrofit2.Response
-import retrofit2.http.*
+import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.PUT
+import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface ApiService {
     
-    // Auth Endpoints
-    @POST("auth/register")
-    suspend fun register(@Body userData: Map<String, String>): Response<AuthResponse>
+    // Auth endpoints
+    @POST("api/auth/register")
+    suspend fun register(@Body request: RegisterRequest): Response<AuthResponse>
     
-    @POST("auth/login")
-    suspend fun login(@Body loginData: Map<String, String>): Response<AuthResponse>
+    @POST("api/auth/login")
+    suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
     
-    @GET("auth/user")
+    @POST("api/auth/logout")
+    suspend fun logout(): Response<Unit>
+    
+    @GET("api/auth/user")
     suspend fun getCurrentUser(): Response<User>
     
-    // Restaurant Endpoints
-    @GET("restaurants")
-    suspend fun getAllRestaurants(): Response<List<Restaurant>>
+    // Restaurant endpoints
+    @GET("api/restaurants")
+    suspend fun getRestaurants(): Response<List<Restaurant>>
     
-    @GET("restaurants/{id}")
-    suspend fun getRestaurantById(@Path("id") id: Int): Response<Restaurant>
+    @GET("api/restaurants/{id}")
+    suspend fun getRestaurantById(@Path("id") id: String): Response<Restaurant>
     
-    @GET("restaurants/category/{category}")
+    @GET("api/restaurants/category/{category}")
     suspend fun getRestaurantsByCategory(@Path("category") category: String): Response<List<Restaurant>>
     
-    @GET("restaurants/search")
+    @GET("api/restaurants/search")
     suspend fun searchRestaurants(@Query("term") searchTerm: String): Response<List<Restaurant>>
     
-    // Menu Items Endpoints
-    @GET("menu-items/restaurant/{restaurantId}")
-    suspend fun getMenuItemsByRestaurant(@Path("restaurantId") restaurantId: Int): Response<List<MenuItem>>
+    // Menu Item endpoints
+    @GET("api/restaurants/{restaurantId}/menu")
+    suspend fun getMenuByRestaurant(@Path("restaurantId") restaurantId: String): Response<List<MenuItem>>
     
-    @GET("menu-items/{id}")
-    suspend fun getMenuItemById(@Path("id") id: Int): Response<MenuItem>
-    
-    @GET("menu-items/restaurant/{restaurantId}/category/{category}")
-    suspend fun getMenuItemsByCategory(
-        @Path("restaurantId") restaurantId: Int,
+    @GET("api/restaurants/{restaurantId}/menu/category/{category}")
+    suspend fun getMenuByCategory(
+        @Path("restaurantId") restaurantId: String,
         @Path("category") category: String
     ): Response<List<MenuItem>>
     
-    // Order Endpoints
-    @POST("orders")
-    suspend fun createOrder(@Body orderData: Map<String, Any>): Response<Order>
+    @GET("api/menu/search")
+    suspend fun searchMenuItems(
+        @Path("restaurantId") restaurantId: String,
+        @Query("term") searchTerm: String
+    ): Response<List<MenuItem>>
     
-    @GET("orders/user")
+    // Order endpoints
+    @POST("api/orders")
+    suspend fun createOrder(@Body orderRequest: OrderRequest): Response<Order>
+    
+    @GET("api/orders/user")
     suspend fun getUserOrders(): Response<List<Order>>
     
-    @GET("orders/{id}")
-    suspend fun getOrderById(@Path("id") id: Int): Response<Order>
+    @GET("api/orders/{id}")
+    suspend fun getOrderById(@Path("id") id: String): Response<Order>
     
-    // User Profile Endpoints
-    @PUT("users/profile")
-    suspend fun updateUserProfile(@Body userData: Map<String, String>): Response<User>
+    @PUT("api/orders/{id}/status")
+    suspend fun updateOrderStatus(
+        @Path("id") id: String,
+        @Body status: Map<String, String>
+    ): Response<Order>
 }
-
-data class AuthResponse(
-    val success: Boolean,
-    val token: String,
-    val user: User
-)

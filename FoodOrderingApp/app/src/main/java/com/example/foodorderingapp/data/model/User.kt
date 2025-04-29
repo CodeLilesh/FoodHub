@@ -7,24 +7,31 @@ import com.google.gson.annotations.SerializedName
 @Entity(tableName = "users")
 data class User(
     @PrimaryKey
-    @SerializedName("id")
-    val id: Int,
-    
-    @SerializedName("name")
+    @SerializedName("_id")
+    val id: String,
     val name: String,
-    
-    @SerializedName("email")
     val email: String,
-    
-    @SerializedName("phone")
-    val phone: String?,
-    
-    @SerializedName("address")
-    val address: String?,
-    
+    val phone: String,
+    val role: String = "user",
     @SerializedName("created_at")
-    val createdAt: String,
-    
-    @SerializedName("role")
-    val role: String
+    val createdAt: String? = null,
+    @SerializedName("updated_at")
+    val updatedAt: String? = null
+)
+
+data class LoginRequest(
+    val email: String,
+    val password: String
+)
+
+data class RegisterRequest(
+    val name: String,
+    val email: String,
+    val password: String,
+    val phone: String
+)
+
+data class AuthResponse(
+    val token: String,
+    val user: User
 )

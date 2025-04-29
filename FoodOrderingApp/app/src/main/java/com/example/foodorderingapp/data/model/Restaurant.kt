@@ -7,42 +7,22 @@ import com.google.gson.annotations.SerializedName
 @Entity(tableName = "restaurants")
 data class Restaurant(
     @PrimaryKey
-    @SerializedName("id")
-    val id: Int,
-    
-    @SerializedName("name")
+    @SerializedName("_id")
+    val id: String,
     val name: String,
-    
-    @SerializedName("description")
     val description: String,
-    
-    @SerializedName("address")
     val address: String,
-    
-    @SerializedName("phone")
     val phone: String,
-    
-    @SerializedName("cuisine_type")
-    val cuisineType: String,
-    
+    val category: String,
     @SerializedName("image_url")
-    val imageUrl: String?,
-    
+    val imageUrl: String,
+    val rating: Double = 0.0,
     @SerializedName("delivery_fee")
-    val deliveryFee: Double,
-    
-    @SerializedName("min_order_amount")
-    val minOrderAmount: Double,
-    
+    val deliveryFee: Double = 0.0,
     @SerializedName("delivery_time")
-    val deliveryTime: String,
-    
-    @SerializedName("opening_hours")
-    val openingHours: String,
-    
-    @SerializedName("rating")
-    val rating: Double,
-    
+    val deliveryTime: String = "30-45 min",
     @SerializedName("created_at")
-    val createdAt: String
+    val createdAt: String? = null,
+    @SerializedName("updated_at")
+    val updatedAt: String? = null
 )

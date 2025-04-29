@@ -5,76 +5,98 @@ import com.example.foodorderingapp.data.model.CartItem
 import com.example.foodorderingapp.data.model.MenuItem
 import com.example.foodorderingapp.utils.NetworkResult
 import kotlinx.coroutines.flow.Flow
+import timber.log.Timber
+import javax.inject.Inject
 
-class CartRepository(
+class CartRepository @Inject constructor(
     private val cartDao: CartDao
 ) {
+    
     // Get all cart items
-    fun getAllCartItems(): Flow<List<CartItem>> = cartDao.getAllCartItems()
+    fun getCartItems(): Flow<List<CartItem>> {
+        return cartDao.getAllCartItems()
+    }
+    
+    // Get cart items for a specific restaurant
+    fun getCartItemsByRestaurant(restaurantId: String): Flow<List<CartItem>> {
+        return cartDao.getCartItemsByRestaurant(restaurantId)
+    }
     
     // Get cart item count
-    fun getCartItemCount(): Flow<Int> = cartDao.getCartItemCount()
+    fun getCartItemCount(): Flow<Int> {
+        return cartDao.getCartItemCount()
+    }
     
-    // Get cart total
-    fun getCartTotal(): Flow<Double?> = cartDao.getCartTotal()
+    // Get cart total price
+    fun getCartTotalPrice(): Flow<Double?> {
+        return cartDao.getCartTotalPrice()
+    }
+    
+    // Get current restaurant ID in cart
+    suspend fun getCurrentRestaurantId(): String? {
+        return cartDao.getCurrentRestaurantId()
+    }
     
     // Add item to cart
-    suspend fun addItemToCart(menuItem: MenuItem, quantity: Int, instructions: String? = null): NetworkResult<Long> {
+    suspend fun addToCart(menuItem: MenuItem, quantity: Int, notes: String? = null): NetworkResult<Long> {
         return try {
-            // Check if the item is from the same restaurant as other items in cart
-            val cartRestaurantId = cartDao.getCartRestaurantId()
-            
-            if (cartRestaurantId != null && cartRestaurantId != menuItem.restaurantId) {
-                return NetworkResult.Error("Items in your cart are from a different restaurant. Clear cart before adding items from another restaurant.")
+            // Check if there's already a different restaurant in the cart
+            val currentRestaurantId = cartDao.getCurrentRestaurantId()
+            if (currentRestaurantId != null && currentRestaurantId != menuItem.restaurantId) {
+                return NetworkResult.Error("Your cart contains items from a different restaurant. Clear your cart to add items from this restaurant.")
             }
             
-            val cartItem = CartItem(
-                menuItemId = menuItem.id,
-                restaurantId = menuItem.restaurantId,
-                name = menuItem.name,
-                price = menuItem.price,
-                quantity = quantity,
-                instructions = instructions,
-                imageUrl = menuItem.imageUrl
-            )
+            // Check if the item is already in the cart
+            val existingItem = cartDao.getCartItemByMenuItemId(menuItem.id)
             
-            val id = cartDao.addOrUpdateCartItem(cartItem)
-            NetworkResult.Success(id)
-            
+            if (existingItem != null) {
+                // Update existing item
+                val updatedQuantity = existingItem.quantity + quantity
+                cartDao.updateCartItemQuantity(existingItem.id, updatedQuantity)
+                NetworkResult.Success(existingItem.id)
+            } else {
+                // Create new cart item
+                val cartItem = CartItem(
+                    menuItemId = menuItem.id,
+                    quantity = quantity,
+                    name = menuItem.name,
+                    price = menuItem.price,
+                    imageUrl = menuItem.imageUrl,
+                    restaurantId = menuItem.restaurantId,
+                    notes = notes
+                )
+                val insertedId = cartDao.insertCartItem(cartItem)
+                NetworkResult.Success(insertedId)
+            }
         } catch (e: Exception) {
-            NetworkResult.Error("Failed to add item to cart: ${e.message}")
+            Timber.e(e, "Add to cart error")
+            NetworkResult.Error("Failed to add item to cart. Please try again.")
         }
     }
     
     // Update cart item quantity
-    suspend fun updateCartItemQuantity(cartItemId: Int, newQuantity: Int): NetworkResult<Unit> {
+    suspend fun updateCartItemQuantity(cartItemId: Long, quantity: Int): NetworkResult<Unit> {
         return try {
-            val cartItem = cartDao.getCartItemById(cartItemId)
-            
-            if (cartItem != null) {
-                if (newQuantity <= 0) {
-                    cartDao.deleteCartItem(cartItem)
-                } else {
-                    val updatedItem = cartItem.copy(quantity = newQuantity)
-                    cartDao.updateCartItem(updatedItem)
-                }
-                NetworkResult.Success(Unit)
+            if (quantity <= 0) {
+                cartDao.deleteCartItemById(cartItemId)
             } else {
-                NetworkResult.Error("Cart item not found")
+                cartDao.updateCartItemQuantity(cartItemId, quantity)
             }
-            
+            NetworkResult.Success(Unit)
         } catch (e: Exception) {
-            NetworkResult.Error("Failed to update cart item: ${e.message}")
+            Timber.e(e, "Update cart item quantity error")
+            NetworkResult.Error("Failed to update cart. Please try again.")
         }
     }
     
     // Remove item from cart
-    suspend fun removeCartItem(cartItemId: Int): NetworkResult<Unit> {
+    suspend fun removeFromCart(cartItemId: Long): NetworkResult<Unit> {
         return try {
             cartDao.deleteCartItemById(cartItemId)
             NetworkResult.Success(Unit)
         } catch (e: Exception) {
-            NetworkResult.Error("Failed to remove item from cart: ${e.message}")
+            Timber.e(e, "Remove from cart error")
+            NetworkResult.Error("Failed to remove item from cart. Please try again.")
         }
     }
     
@@ -84,13 +106,19 @@ class CartRepository(
             cartDao.clearCart()
             NetworkResult.Success(Unit)
         } catch (e: Exception) {
-            NetworkResult.Error("Failed to clear cart: ${e.message}")
+            Timber.e(e, "Clear cart error")
+            NetworkResult.Error("Failed to clear cart. Please try again.")
         }
     }
     
-    // Check if cart has items from multiple restaurants
-    suspend fun validateRestaurantId(restaurantId: Int): Boolean {
-        val currentRestaurantId = cartDao.getCartRestaurantId()
-        return currentRestaurantId == null || currentRestaurantId == restaurantId
+    // Clear cart for specific restaurant
+    suspend fun clearCartByRestaurant(restaurantId: String): NetworkResult<Unit> {
+        return try {
+            cartDao.clearCartByRestaurant(restaurantId)
+            NetworkResult.Success(Unit)
+        } catch (e: Exception) {
+            Timber.e(e, "Clear cart by restaurant error")
+            NetworkResult.Error("Failed to clear cart. Please try again.")
+        }
     }
 }

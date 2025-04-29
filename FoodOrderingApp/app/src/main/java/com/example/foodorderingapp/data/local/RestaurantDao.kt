@@ -1,36 +1,31 @@
 package com.example.foodorderingapp.data.local
 
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
 import com.example.foodorderingapp.data.model.Restaurant
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RestaurantDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertRestaurant(restaurant: Restaurant)
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRestaurants(restaurants: List<Restaurant>)
     
-    @Update
-    suspend fun updateRestaurant(restaurant: Restaurant)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRestaurant(restaurant: Restaurant)
     
-    @Delete
-    suspend fun deleteRestaurant(restaurant: Restaurant)
-    
-    @Query("SELECT * FROM restaurants")
+    @Query("SELECT * FROM restaurants ORDER BY name ASC")
     fun getAllRestaurants(): Flow<List<Restaurant>>
     
-    @Query("SELECT * FROM restaurants WHERE id = :restaurantId")
-    fun getRestaurantById(restaurantId: Int): Flow<Restaurant?>
+    @Query("SELECT * FROM restaurants WHERE id = :id")
+    suspend fun getRestaurantById(id: String): Restaurant?
     
-    @Query("SELECT * FROM restaurants WHERE cuisine_type = :cuisineType")
-    fun getRestaurantsByCuisine(cuisineType: String): Flow<List<Restaurant>>
+    @Query("SELECT * FROM restaurants WHERE category = :category ORDER BY name ASC")
+    fun getRestaurantsByCategory(category: String): Flow<List<Restaurant>>
     
-    @Query("SELECT * FROM restaurants WHERE rating >= :minRating")
-    fun getRestaurantsByRating(minRating: Double): Flow<List<Restaurant>>
-    
-    @Query("SELECT * FROM restaurants WHERE name LIKE '%' || :searchTerm || '%'")
+    @Query("SELECT * FROM restaurants WHERE name LIKE '%' || :searchTerm || '%' ORDER BY name ASC")
     fun searchRestaurants(searchTerm: String): Flow<List<Restaurant>>
     
     @Query("DELETE FROM restaurants")

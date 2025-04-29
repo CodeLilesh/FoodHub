@@ -1,71 +1,65 @@
 package com.example.foodorderingapp.utils
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import javax.inject.Inject
+import javax.inject.Singleton
 
-// DataStore Singleton
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
+private val Context.dataStore by preferencesDataStore("user_preferences")
 
-class SessionManager(private val context: Context) {
-
+@Singleton
+class SessionManager @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
     companion object {
-        private val AUTH_TOKEN = stringPreferencesKey("auth_token")
-        private val USER_ID = stringPreferencesKey("user_id")
-        private val USER_NAME = stringPreferencesKey("user_name")
-        private val USER_EMAIL = stringPreferencesKey("user_email")
+        private val TOKEN_KEY = stringPreferencesKey("auth_token")
+        private val USER_ID_KEY = stringPreferencesKey("user_id")
+        private val NAME_KEY = stringPreferencesKey("name")
+        private val EMAIL_KEY = stringPreferencesKey("email")
     }
 
-    // Get Auth Token
+    // Get the auth token flow
     val authToken: Flow<String?> = context.dataStore.data.map { preferences ->
-        preferences[AUTH_TOKEN]
+        preferences[TOKEN_KEY]
     }
 
-    // Get User ID
+    // Get user ID
     val userId: Flow<String?> = context.dataStore.data.map { preferences ->
-        preferences[USER_ID]
+        preferences[USER_ID_KEY]
     }
 
-    // Get User Name
+    // Get user name
     val userName: Flow<String?> = context.dataStore.data.map { preferences ->
-        preferences[USER_NAME]
+        preferences[NAME_KEY]
     }
 
-    // Get User Email
+    // Get user email
     val userEmail: Flow<String?> = context.dataStore.data.map { preferences ->
-        preferences[USER_EMAIL]
+        preferences[EMAIL_KEY]
     }
 
-    // Check if user is logged in
-    val isLoggedIn: Flow<Boolean> = authToken.map { token ->
-        !token.isNullOrEmpty()
-    }
-
-    // Save Auth Token
-    suspend fun saveAuthToken(token: String) {
+    // Save auth session data
+    suspend fun saveAuthData(token: String, userId: String, name: String, email: String) {
         context.dataStore.edit { preferences ->
-            preferences[AUTH_TOKEN] = token
+            preferences[TOKEN_KEY] = token
+            preferences[USER_ID_KEY] = userId
+            preferences[NAME_KEY] = name
+            preferences[EMAIL_KEY] = email
         }
     }
 
-    // Save User Details
-    suspend fun saveUserDetails(id: String, name: String, email: String) {
+    // Clear auth session data
+    suspend fun clearAuthData() {
         context.dataStore.edit { preferences ->
-            preferences[USER_ID] = id
-            preferences[USER_NAME] = name
-            preferences[USER_EMAIL] = email
-        }
-    }
-
-    // Clear Session
-    suspend fun clearSession() {
-        context.dataStore.edit { preferences ->
-            preferences.clear()
+            preferences.remove(TOKEN_KEY)
+            preferences.remove(USER_ID_KEY)
+            preferences.remove(NAME_KEY)
+            preferences.remove(EMAIL_KEY)
         }
     }
 }

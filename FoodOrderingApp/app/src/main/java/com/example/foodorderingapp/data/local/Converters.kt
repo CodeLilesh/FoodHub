@@ -4,26 +4,17 @@ import androidx.room.TypeConverter
 import com.example.foodorderingapp.data.model.OrderItem
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import java.util.Date
 
+/**
+ * Type converters for Room database
+ * Handles conversions between complex data types and primitive types that Room can store
+ */
 class Converters {
     private val gson = Gson()
     
-    // Convert Date to Long timestamp and vice versa
-    @TypeConverter
-    fun fromTimestamp(value: Long?): Date? {
-        return value?.let { Date(it) }
-    }
-    
-    @TypeConverter
-    fun dateToTimestamp(date: Date?): Long? {
-        return date?.time
-    }
-    
-    // Convert List<OrderItem> to String and vice versa
     @TypeConverter
     fun fromOrderItemList(value: List<OrderItem>?): String {
-        return gson.toJson(value ?: emptyList<OrderItem>())
+        return gson.toJson(value)
     }
     
     @TypeConverter
@@ -32,10 +23,9 @@ class Converters {
         return gson.fromJson(value, listType) ?: emptyList()
     }
     
-    // Convert List<String> to String and vice versa
     @TypeConverter
     fun fromStringList(value: List<String>?): String {
-        return gson.toJson(value ?: emptyList<String>())
+        return gson.toJson(value)
     }
     
     @TypeConverter

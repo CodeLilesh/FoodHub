@@ -1,167 +1,113 @@
 package com.example.foodorderingapp.data.repository
 
 import com.example.foodorderingapp.data.local.RestaurantDao
-import com.example.foodorderingapp.data.model.MenuItem
 import com.example.foodorderingapp.data.model.Restaurant
 import com.example.foodorderingapp.data.remote.ApiService
 import com.example.foodorderingapp.utils.NetworkResult
 import kotlinx.coroutines.flow.Flow
-import java.io.IOException
+import timber.log.Timber
+import javax.inject.Inject
 
-class RestaurantRepository(
+class RestaurantRepository @Inject constructor(
     private val apiService: ApiService,
     private val restaurantDao: RestaurantDao
 ) {
+    
     // Get all restaurants from local database
-    fun getAllRestaurants(): Flow<List<Restaurant>> = restaurantDao.getAllRestaurants()
-    
-    // Get restaurant by ID from local database
-    fun getRestaurantById(id: Int): Flow<Restaurant?> = restaurantDao.getRestaurantById(id)
-    
-    // Get restaurants by cuisine from local database
-    fun getRestaurantsByCuisine(cuisine: String): Flow<List<Restaurant>> = 
-        restaurantDao.getRestaurantsByCuisine(cuisine)
-    
-    // Get popular restaurants (rating >= 4.0) from local database
-    fun getPopularRestaurants(): Flow<List<Restaurant>> = restaurantDao.getRestaurantsByRating(4.0)
-    
-    // Search restaurants in local database
-    fun searchRestaurants(query: String): Flow<List<Restaurant>> = 
-        restaurantDao.searchRestaurants(query)
-    
-    // Fetch all restaurants from API and update local database
-    suspend fun fetchAndCacheAllRestaurants(): NetworkResult<List<Restaurant>> {
-        return try {
-            val response = apiService.getAllRestaurants()
-            
-            if (response.isSuccessful) {
-                val restaurants = response.body()
-                if (!restaurants.isNullOrEmpty()) {
-                    restaurantDao.insertRestaurants(restaurants)
-                    NetworkResult.Success(restaurants)
-                } else {
-                    NetworkResult.Error("No restaurants found")
-                }
-            } else {
-                NetworkResult.Error("Failed to fetch restaurants: ${response.message()}")
-            }
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
-        } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
-        }
+    fun getRestaurants(): Flow<List<Restaurant>> {
+        return restaurantDao.getAllRestaurants()
     }
     
-    // Fetch restaurant by ID from API and update local database
-    suspend fun fetchAndCacheRestaurantById(id: Int): NetworkResult<Restaurant> {
+    // Get restaurants by category from local database
+    fun getRestaurantsByCategory(category: String): Flow<List<Restaurant>> {
+        return restaurantDao.getRestaurantsByCategory(category)
+    }
+    
+    // Search restaurants by term from local database
+    fun searchRestaurants(term: String): Flow<List<Restaurant>> {
+        return restaurantDao.searchRestaurants(term)
+    }
+    
+    // Fetch all restaurants from API and update local database
+    suspend fun refreshRestaurants(): NetworkResult<List<Restaurant>> {
         return try {
-            val response = apiService.getRestaurantById(id)
+            val response = apiService.getRestaurants()
             
-            if (response.isSuccessful) {
-                val restaurant = response.body()
-                if (restaurant != null) {
-                    restaurantDao.insertRestaurant(restaurant)
-                    NetworkResult.Success(restaurant)
-                } else {
-                    NetworkResult.Error("Restaurant not found")
-                }
+            if (response.isSuccessful && response.body() != null) {
+                val restaurants = response.body()!!
+                restaurantDao.insertRestaurants(restaurants)
+                NetworkResult.Success(restaurants)
             } else {
-                NetworkResult.Error("Failed to fetch restaurant: ${response.message()}")
+                Timber.e("Fetch restaurants failed: ${response.errorBody()?.string()}")
+                NetworkResult.Error("Failed to load restaurants.")
             }
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
+            Timber.e(e, "Fetch restaurants error")
+            NetworkResult.Error("Could not connect to server. Please check your internet connection.")
         }
     }
     
     // Fetch restaurants by category from API and update local database
-    suspend fun fetchAndCacheRestaurantsByCategory(category: String): NetworkResult<List<Restaurant>> {
+    suspend fun refreshRestaurantsByCategory(category: String): NetworkResult<List<Restaurant>> {
         return try {
             val response = apiService.getRestaurantsByCategory(category)
             
-            if (response.isSuccessful) {
-                val restaurants = response.body()
-                if (!restaurants.isNullOrEmpty()) {
-                    restaurantDao.insertRestaurants(restaurants)
-                    NetworkResult.Success(restaurants)
-                } else {
-                    NetworkResult.Error("No restaurants found for category: $category")
-                }
+            if (response.isSuccessful && response.body() != null) {
+                val restaurants = response.body()!!
+                restaurantDao.insertRestaurants(restaurants)
+                NetworkResult.Success(restaurants)
             } else {
-                NetworkResult.Error("Failed to fetch restaurants: ${response.message()}")
+                Timber.e("Fetch restaurants by category failed: ${response.errorBody()?.string()}")
+                NetworkResult.Error("Failed to load restaurants.")
             }
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
+            Timber.e(e, "Fetch restaurants by category error")
+            NetworkResult.Error("Could not connect to server. Please check your internet connection.")
         }
     }
     
-    // Search restaurants via API and update local database
-    suspend fun fetchAndCacheSearchResults(query: String): NetworkResult<List<Restaurant>> {
+    // Fetch a single restaurant by ID
+    suspend fun getRestaurantById(id: String): NetworkResult<Restaurant> {
+        // First try to get from local database
+        val localRestaurant = restaurantDao.getRestaurantById(id)
+        if (localRestaurant != null) {
+            return NetworkResult.Success(localRestaurant)
+        }
+        
+        // If not in database, fetch from API
         return try {
-            val response = apiService.searchRestaurants(query)
+            val response = apiService.getRestaurantById(id)
             
-            if (response.isSuccessful) {
-                val restaurants = response.body()
-                if (!restaurants.isNullOrEmpty()) {
-                    restaurantDao.insertRestaurants(restaurants)
-                    NetworkResult.Success(restaurants)
-                } else {
-                    NetworkResult.Error("No restaurants found for: $query")
-                }
+            if (response.isSuccessful && response.body() != null) {
+                val restaurant = response.body()!!
+                restaurantDao.insertRestaurant(restaurant)
+                NetworkResult.Success(restaurant)
             } else {
-                NetworkResult.Error("Failed to search restaurants: ${response.message()}")
+                Timber.e("Fetch restaurant by ID failed: ${response.errorBody()?.string()}")
+                NetworkResult.Error("Failed to load restaurant details.")
             }
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
+            Timber.e(e, "Fetch restaurant by ID error")
+            NetworkResult.Error("Could not connect to server. Please check your internet connection.")
         }
     }
     
-    // Fetch menu items for a restaurant from API
-    suspend fun fetchMenuItemsByRestaurant(restaurantId: Int): NetworkResult<List<MenuItem>> {
+    // Search restaurants from API
+    suspend fun searchRestaurantsFromApi(term: String): NetworkResult<List<Restaurant>> {
         return try {
-            val response = apiService.getMenuItemsByRestaurant(restaurantId)
+            val response = apiService.searchRestaurants(term)
             
-            if (response.isSuccessful) {
-                val menuItems = response.body()
-                if (!menuItems.isNullOrEmpty()) {
-                    NetworkResult.Success(menuItems)
-                } else {
-                    NetworkResult.Error("No menu items found for restaurant")
-                }
+            if (response.isSuccessful && response.body() != null) {
+                val restaurants = response.body()!!
+                restaurantDao.insertRestaurants(restaurants)
+                NetworkResult.Success(restaurants)
             } else {
-                NetworkResult.Error("Failed to fetch menu items: ${response.message()}")
+                Timber.e("Search restaurants failed: ${response.errorBody()?.string()}")
+                NetworkResult.Error("Failed to search restaurants.")
             }
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
-        }
-    }
-    
-    // Fetch menu items by category for a restaurant from API
-    suspend fun fetchMenuItemsByCategory(restaurantId: Int, category: String): NetworkResult<List<MenuItem>> {
-        return try {
-            val response = apiService.getMenuItemsByCategory(restaurantId, category)
-            
-            if (response.isSuccessful) {
-                val menuItems = response.body()
-                if (!menuItems.isNullOrEmpty()) {
-                    NetworkResult.Success(menuItems)
-                } else {
-                    NetworkResult.Error("No menu items found for category: $category")
-                }
-            } else {
-                NetworkResult.Error("Failed to fetch menu items: ${response.message()}")
-            }
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
-        } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
+            Timber.e(e, "Search restaurants error")
+            NetworkResult.Error("Could not connect to server. Please check your internet connection.")
         }
     }
 }

@@ -18,33 +18,19 @@ import com.google.gson.annotations.SerializedName
 )
 data class MenuItem(
     @PrimaryKey
-    @SerializedName("id")
-    val id: Int,
-    
-    @SerializedName("restaurant_id")
-    val restaurantId: Int,
-    
-    @SerializedName("name")
+    @SerializedName("_id")
+    val id: String,
     val name: String,
-    
-    @SerializedName("description")
     val description: String,
-    
-    @SerializedName("price")
     val price: Double,
-    
-    @SerializedName("category")
     val category: String,
-    
     @SerializedName("image_url")
-    val imageUrl: String?,
-    
-    @SerializedName("is_vegetarian")
-    val isVegetarian: Boolean,
-    
-    @SerializedName("is_available")
-    val isAvailable: Boolean,
-    
+    val imageUrl: String,
+    val available: Boolean = true,
+    @SerializedName("restaurant_id")
+    val restaurantId: String,
     @SerializedName("created_at")
-    val createdAt: String
+    val createdAt: String? = null,
+    @SerializedName("updated_at")
+    val updatedAt: String? = null
 )

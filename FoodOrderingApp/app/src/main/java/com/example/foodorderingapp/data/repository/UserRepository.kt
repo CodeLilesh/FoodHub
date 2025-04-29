@@ -1,138 +1,120 @@
 package com.example.foodorderingapp.data.repository
 
 import com.example.foodorderingapp.data.local.UserDao
+import com.example.foodorderingapp.data.model.LoginRequest
+import com.example.foodorderingapp.data.model.RegisterRequest
 import com.example.foodorderingapp.data.model.User
 import com.example.foodorderingapp.data.remote.ApiService
 import com.example.foodorderingapp.utils.NetworkResult
 import com.example.foodorderingapp.utils.SessionManager
 import kotlinx.coroutines.flow.Flow
-import retrofit2.Response
-import java.io.IOException
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import timber.log.Timber
+import javax.inject.Inject
 
-class UserRepository(
+class UserRepository @Inject constructor(
     private val apiService: ApiService,
     private val userDao: UserDao,
     private val sessionManager: SessionManager
 ) {
-    // Get current user from local database
-    fun getCurrentUser(userId: Int): Flow<User?> = userDao.getUserById(userId)
     
-    // Register user
-    suspend fun registerUser(name: String, email: String, password: String, phone: String): NetworkResult<User> {
+    val currentUser: Flow<User?> = userDao.getCurrentUser()
+    
+    suspend fun register(name: String, email: String, password: String, phone: String): NetworkResult<Unit> {
         return try {
-            val userData = mapOf(
-                "name" to name,
-                "email" to email,
-                "password" to password,
-                "phone" to phone
-            )
+            val request = RegisterRequest(name, email, password, phone)
+            val response = apiService.register(request)
             
-            val response = apiService.register(userData)
-            handleAuthResponse(response)
-            
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
-        } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
-        }
-    }
-    
-    // Login user
-    suspend fun loginUser(email: String, password: String): NetworkResult<User> {
-        return try {
-            val loginData = mapOf(
-                "email" to email,
-                "password" to password
-            )
-            
-            val response = apiService.login(loginData)
-            handleAuthResponse(response)
-            
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
-        } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
-        }
-    }
-    
-    // Handle auth response
-    private suspend fun handleAuthResponse(response: Response<com.example.foodorderingapp.data.remote.AuthResponse>): NetworkResult<User> {
-        if (response.isSuccessful) {
-            val authResponse = response.body()
-            if (authResponse != null) {
-                // Save auth token
-                sessionManager.saveAuthToken(authResponse.token)
-                
-                // Save user details
-                sessionManager.saveUserDetails(
-                    authResponse.user.id.toString(),
+            if (response.isSuccessful && response.body() != null) {
+                val authResponse = response.body()!!
+                // Save user to database
+                userDao.insertUser(authResponse.user)
+                // Save auth data to preferences
+                sessionManager.saveAuthData(
+                    authResponse.token,
+                    authResponse.user.id,
                     authResponse.user.name,
                     authResponse.user.email
                 )
-                
-                // Save user to local database
-                userDao.insertUser(authResponse.user)
-                
-                return NetworkResult.Success(authResponse.user)
+                NetworkResult.Success(Unit)
+            } else {
+                Timber.e("Registration failed: ${response.errorBody()?.string()}")
+                NetworkResult.Error("Registration failed. Please try again.")
             }
-        }
-        return NetworkResult.Error("Authentication failed: ${response.message()}")
-    }
-    
-    // Logout user
-    suspend fun logoutUser() {
-        userDao.clearUsers()
-        sessionManager.clearSession()
-    }
-    
-    // Update user profile
-    suspend fun updateUserProfile(userData: Map<String, String>): NetworkResult<User> {
-        return try {
-            val response = apiService.updateUserProfile(userData)
-            
-            if (response.isSuccessful) {
-                val user = response.body()
-                if (user != null) {
-                    // Update user in local database
-                    userDao.insertUser(user)
-                    
-                    // Update user session details
-                    sessionManager.saveUserDetails(
-                        user.id.toString(),
-                        user.name,
-                        user.email
-                    )
-                    
-                    return NetworkResult.Success(user)
-                }
-            }
-            NetworkResult.Error("Update failed: ${response.message()}")
-            
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
+            Timber.e(e, "Registration error")
+            NetworkResult.Error("Could not connect to server. Please check your internet connection.")
         }
     }
     
-    // Fetch current user from API and update local database
-    suspend fun refreshCurrentUser(): NetworkResult<User> {
+    suspend fun login(email: String, password: String): NetworkResult<Unit> {
+        return try {
+            val request = LoginRequest(email, password)
+            val response = apiService.login(request)
+            
+            if (response.isSuccessful && response.body() != null) {
+                val authResponse = response.body()!!
+                // Save user to database
+                userDao.insertUser(authResponse.user)
+                // Save auth data to preferences
+                sessionManager.saveAuthData(
+                    authResponse.token,
+                    authResponse.user.id,
+                    authResponse.user.name,
+                    authResponse.user.email
+                )
+                NetworkResult.Success(Unit)
+            } else {
+                Timber.e("Login failed: ${response.errorBody()?.string()}")
+                NetworkResult.Error("Invalid email or password.")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Login error")
+            NetworkResult.Error("Could not connect to server. Please check your internet connection.")
+        }
+    }
+    
+    suspend fun logout(): NetworkResult<Unit> {
+        return try {
+            val response = apiService.logout()
+            
+            // Clear local data even if API call fails
+            sessionManager.clearAuthData()
+            userDao.clearUsers()
+            
+            NetworkResult.Success(Unit)
+        } catch (e: Exception) {
+            Timber.e(e, "Logout error")
+            
+            // Still clear local data
+            sessionManager.clearAuthData()
+            userDao.clearUsers()
+            
+            NetworkResult.Success(Unit)
+        }
+    }
+    
+    suspend fun refreshUserData(): NetworkResult<User> {
         return try {
             val response = apiService.getCurrentUser()
             
-            if (response.isSuccessful) {
-                val user = response.body()
-                if (user != null) {
-                    userDao.insertUser(user)
-                    return NetworkResult.Success(user)
-                }
+            if (response.isSuccessful && response.body() != null) {
+                val user = response.body()!!
+                userDao.insertUser(user)
+                NetworkResult.Success(user)
+            } else {
+                Timber.e("Get user data failed: ${response.errorBody()?.string()}")
+                NetworkResult.Error("Failed to get user data.")
             }
-            NetworkResult.Error("Failed to refresh user: ${response.message()}")
-            
-        } catch (e: IOException) {
-            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            NetworkResult.Error("An error occurred: ${e.message}")
+            Timber.e(e, "Get user data error")
+            NetworkResult.Error("Could not connect to server. Please check your internet connection.")
         }
+    }
+    
+    suspend fun isLoggedIn(): Boolean {
+        val token = sessionManager.authToken.firstOrNull()
+        return !token.isNullOrEmpty()
     }
 }
