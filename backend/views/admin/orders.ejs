@@ -1,0 +1,251 @@
+<div class="container-fluid">
+    <h1 class="h3 mb-4 text-gray-800">Manage Orders</h1>
+
+    <% if (locals.error) { %>
+        <div class="alert alert-danger">
+            <%= error %>
+        </div>
+    <% } %>
+
+    <!-- Restaurant Selection Card -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Select Restaurant</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <form id="restaurant-form" method="GET" action="/admin/orders">
+                        <div class="form-group">
+                            <select class="form-control" id="restaurant_id" name="restaurant_id" onchange="this.form.submit()">
+                                <% if (restaurants && restaurants.length > 0) { %>
+                                    <% restaurants.forEach(restaurant => { %>
+                                        <option value="<%= restaurant.id %>" 
+                                                <%= selectedRestaurant && selectedRestaurant.id === restaurant.id ? 'selected' : '' %>>
+                                            <%= restaurant.name %>
+                                        </option>
+                                    <% }); %>
+                                <% } else { %>
+                                    <option value="">No restaurants available</option>
+                                <% } %>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Orders Card -->
+    <% if (selectedRestaurant) { %>
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Orders for <%= selectedRestaurant.name %></h6>
+                <div>
+                    <button class="btn btn-outline-primary btn-sm" id="refresh-orders">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <% if (orders && orders.length > 0) { %>
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="ordersTable" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Customer</th>
+                                    <th>Items</th>
+                                    <th>Total</th>
+                                    <th>Status</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% orders.forEach(order => { %>
+                                    <tr>
+                                        <td>#<%= order.id %></td>
+                                        <td>
+                                            <%= order.user_name %><br>
+                                            <small class="text-muted"><%= order.user_phone %></small>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info view-items" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#viewItemsModal" 
+                                                    data-order-id="<%= order.id %>"
+                                                    data-order-items="<%= JSON.stringify(order.items) %>">
+                                                View <%= order.items.length %> items
+                                            </button>
+                                        </td>
+                                        <td>$<%= order.total_price.toFixed(2) %></td>
+                                        <td>
+                                            <span class="badge 
+                                                <%= order.status === 'pending' ? 'bg-warning' : '' %>
+                                                <%= order.status === 'confirmed' ? 'bg-info' : '' %>
+                                                <%= order.status === 'preparing' ? 'bg-primary' : '' %>
+                                                <%= order.status === 'ready' ? 'bg-light text-dark' : '' %>
+                                                <%= order.status === 'delivered' ? 'bg-success' : '' %>
+                                                <%= order.status === 'cancelled' ? 'bg-danger' : '' %>
+                                            ">
+                                                <%= order.status.charAt(0).toUpperCase() + order.status.slice(1) %>
+                                            </span>
+                                        </td>
+                                        <td><%= new Date(order.created_at).toLocaleString() %></td>
+                                        <td>
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-outline-primary dropdown-toggle" 
+                                                        type="button" 
+                                                        data-bs-toggle="dropdown">
+                                                    Update Status
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    <li><a class="dropdown-item update-status" 
+                                                           href="#" 
+                                                           data-order-id="<%= order.id %>" 
+                                                           data-status="confirmed"
+                                                           <%= order.status === 'confirmed' ? 'style="background-color: #e9ecef;"' : '' %>>
+                                                        Confirm
+                                                    </a></li>
+                                                    <li><a class="dropdown-item update-status" 
+                                                           href="#" 
+                                                           data-order-id="<%= order.id %>" 
+                                                           data-status="preparing"
+                                                           <%= order.status === 'preparing' ? 'style="background-color: #e9ecef;"' : '' %>>
+                                                        Preparing
+                                                    </a></li>
+                                                    <li><a class="dropdown-item update-status" 
+                                                           href="#" 
+                                                           data-order-id="<%= order.id %>" 
+                                                           data-status="ready"
+                                                           <%= order.status === 'ready' ? 'style="background-color: #e9ecef;"' : '' %>>
+                                                        Ready
+                                                    </a></li>
+                                                    <li><a class="dropdown-item update-status" 
+                                                           href="#" 
+                                                           data-order-id="<%= order.id %>" 
+                                                           data-status="delivered"
+                                                           <%= order.status === 'delivered' ? 'style="background-color: #e9ecef;"' : '' %>>
+                                                        Delivered
+                                                    </a></li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><a class="dropdown-item update-status text-danger" 
+                                                           href="#" 
+                                                           data-order-id="<%= order.id %>" 
+                                                           data-status="cancelled"
+                                                           <%= order.status === 'cancelled' ? 'style="background-color: #e9ecef;"' : '' %>>
+                                                        Cancel
+                                                    </a></li>
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            </tbody>
+                        </table>
+                    </div>
+                <% } else { %>
+                    <div class="text-center py-4">
+                        <p>No orders found for this restaurant.</p>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<!-- View Items Modal -->
+<div class="modal fade" id="viewItemsModal" tabindex="-1" aria-labelledby="viewItemsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="viewItemsModalLabel">Order Items</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="list-group" id="items-list">
+                    <!-- Items will be loaded here -->
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function() {
+        // Get token from localStorage
+        const token = localStorage.getItem('admin-token');
+        
+        // Check if token exists
+        if (!token) {
+            window.location.href = '/admin/login';
+            return;
+        }
+        
+        // Initialize DataTable
+        $('#ordersTable').DataTable({
+            "order": [[5, "desc"]] // Sort by date (column 5) descending
+        });
+        
+        // View order items
+        $('.view-items').on('click', function() {
+            const items = JSON.parse($(this).data('order-items'));
+            
+            $('#items-list').empty();
+            
+            items.forEach(item => {
+                $('#items-list').append(`
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-0">${item.name}</h6>
+                            <small class="text-muted">${item.description || ''}</small>
+                        </div>
+                        <div>
+                            <span class="badge bg-primary rounded-pill">${item.quantity}x</span>
+                            <span class="ms-2">$${(item.price_per_item * item.quantity).toFixed(2)}</span>
+                        </div>
+                    </li>
+                `);
+            });
+        });
+        
+        // Update order status
+        $('.update-status').on('click', function(e) {
+            e.preventDefault();
+            
+            const orderId = $(this).data('order-id');
+            const status = $(this).data('status');
+            
+            $.ajax({
+                url: `/api/orders/${orderId}/status`,
+                type: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify({ status }),
+                headers: {
+                    'x-auth-token': token
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Reload the page to update the order status
+                        location.reload();
+                    } else {
+                        alert(response.message || 'Failed to update order status');
+                    }
+                },
+                error: function(xhr) {
+                    const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Failed to update order status';
+                    alert(errorMsg);
+                }
+            });
+        });
+        
+        // Refresh orders button
+        $('#refresh-orders').on('click', function() {
+            location.reload();
+        });
+    });
+</script>

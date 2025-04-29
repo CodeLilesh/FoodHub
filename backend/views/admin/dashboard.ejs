@@ -1,0 +1,183 @@
+<div class="container-fluid">
+    <h1 class="h3 mb-4 text-gray-800">Dashboard</h1>
+
+    <% if (locals.error) { %>
+        <div class="alert alert-danger">
+            <%= error %>
+        </div>
+    <% } %>
+
+    <!-- Content Row -->
+    <div class="row">
+        <!-- Total Orders Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Orders (30 days)</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><%= stats ? stats.total_orders : 0 %></div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Orders Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Pending Orders</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><%= stats ? stats.pending_orders : 0 %></div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Revenue Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Revenue (30 days)</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">$<%= stats ? (stats.total_revenue || 0).toFixed(2) : 0 %></div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Restaurants Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Total Restaurants</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800"><%= locals.restaurantCount || 0 %></div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-store fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Row -->
+    <div class="row">
+        <!-- Order Status Statistics -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Order Status</h6>
+                </div>
+                <div class="card-body">
+                    <h4 class="small font-weight-bold">Pending <span class="float-right"><%= stats ? stats.pending_orders : 0 %></span></h4>
+                    <div class="progress mb-4">
+                        <div class="progress-bar bg-warning" role="progressbar" style="width: <%= stats && stats.total_orders ? (stats.pending_orders / stats.total_orders * 100) : 0 %>%" 
+                             aria-valuenow="<%= stats && stats.total_orders ? (stats.pending_orders / stats.total_orders * 100) : 0 %>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <h4 class="small font-weight-bold">Confirmed <span class="float-right"><%= stats ? stats.confirmed_orders : 0 %></span></h4>
+                    <div class="progress mb-4">
+                        <div class="progress-bar bg-info" role="progressbar" style="width: <%= stats && stats.total_orders ? (stats.confirmed_orders / stats.total_orders * 100) : 0 %>%" 
+                             aria-valuenow="<%= stats && stats.total_orders ? (stats.confirmed_orders / stats.total_orders * 100) : 0 %>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <h4 class="small font-weight-bold">Preparing <span class="float-right"><%= stats ? stats.preparing_orders : 0 %></span></h4>
+                    <div class="progress mb-4">
+                        <div class="progress-bar" role="progressbar" style="width: <%= stats && stats.total_orders ? (stats.preparing_orders / stats.total_orders * 100) : 0 %>%" 
+                             aria-valuenow="<%= stats && stats.total_orders ? (stats.preparing_orders / stats.total_orders * 100) : 0 %>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <h4 class="small font-weight-bold">Ready <span class="float-right"><%= stats ? stats.ready_orders : 0 %></span></h4>
+                    <div class="progress mb-4">
+                        <div class="progress-bar bg-primary" role="progressbar" style="width: <%= stats && stats.total_orders ? (stats.ready_orders / stats.total_orders * 100) : 0 %>%" 
+                             aria-valuenow="<%= stats && stats.total_orders ? (stats.ready_orders / stats.total_orders * 100) : 0 %>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <h4 class="small font-weight-bold">Delivered <span class="float-right"><%= stats ? stats.delivered_orders : 0 %></span></h4>
+                    <div class="progress mb-4">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: <%= stats && stats.total_orders ? (stats.delivered_orders / stats.total_orders * 100) : 0 %>%" 
+                             aria-valuenow="<%= stats && stats.total_orders ? (stats.delivered_orders / stats.total_orders * 100) : 0 %>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <h4 class="small font-weight-bold">Cancelled <span class="float-right"><%= stats ? stats.cancelled_orders : 0 %></span></h4>
+                    <div class="progress">
+                        <div class="progress-bar bg-danger" role="progressbar" style="width: <%= stats && stats.total_orders ? (stats.cancelled_orders / stats.total_orders * 100) : 0 %>%" 
+                             aria-valuenow="<%= stats && stats.total_orders ? (stats.cancelled_orders / stats.total_orders * 100) : 0 %>" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Orders -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Orders</h6>
+                </div>
+                <div class="card-body">
+                    <% if (recentOrders && recentOrders.length > 0) { %>
+                        <div class="table-responsive">
+                            <table class="table table-bordered" id="recentOrdersTable" width="100%" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Restaurant</th>
+                                        <th>Customer</th>
+                                        <th>Price</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% recentOrders.forEach(order => { %>
+                                        <tr>
+                                            <td><a href="/admin/orders?restaurant_id=<%= order.restaurant_id %>">#<%= order.id %></a></td>
+                                            <td><%= order.restaurant_name %></td>
+                                            <td><%= order.user_name %></td>
+                                            <td>$<%= order.total_price.toFixed(2) %></td>
+                                            <td>
+                                                <% if (order.status === 'pending') { %>
+                                                    <span class="badge badge-warning">Pending</span>
+                                                <% } else if (order.status === 'confirmed') { %>
+                                                    <span class="badge badge-info">Confirmed</span>
+                                                <% } else if (order.status === 'preparing') { %>
+                                                    <span class="badge badge-primary">Preparing</span>
+                                                <% } else if (order.status === 'ready') { %>
+                                                    <span class="badge badge-light">Ready</span>
+                                                <% } else if (order.status === 'delivered') { %>
+                                                    <span class="badge badge-success">Delivered</span>
+                                                <% } else if (order.status === 'cancelled') { %>
+                                                    <span class="badge badge-danger">Cancelled</span>
+                                                <% } %>
+                                            </td>
+                                            <td><%= new Date(order.created_at).toLocaleString() %></td>
+                                        </tr>
+                                    <% }); %>
+                                </tbody>
+                            </table>
+                        </div>
+                    <% } else { %>
+                        <p class="text-center">No recent orders found.</p>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
