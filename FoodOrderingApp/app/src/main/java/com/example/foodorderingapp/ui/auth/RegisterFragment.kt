@@ -6,21 +6,18 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.fragment.findNavController
+import com.example.foodorderingapp.R
 import com.example.foodorderingapp.databinding.FragmentRegisterBinding
-import com.example.foodorderingapp.utils.NetworkResult
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class RegisterFragment : Fragment() {
 
     private var _binding: FragmentRegisterBinding? = null
     private val binding get() = _binding!!
-    
+
     private val viewModel: AuthViewModel by activityViewModels()
 
     override fun onCreateView(
@@ -35,80 +32,62 @@ class RegisterFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        setupListeners()
-        observeViewModel()
+        setupUI()
+        setupObservers()
     }
     
-    private fun setupListeners() {
+    private fun setupUI() {
         // Register button click
         binding.btnRegister.setOnClickListener {
-            val name = binding.etName.text.toString().trim()
-            val email = binding.etEmail.text.toString().trim()
-            val phone = binding.etPhone.text.toString().trim()
-            val password = binding.etPassword.text.toString().trim()
-            val confirmPassword = binding.etConfirmPassword.text.toString().trim()
-            
-            viewModel.register(name, email, password, confirmPassword, phone)
+            attemptRegistration()
         }
         
-        // Login tab navigation
-        binding.tvLoginPrompt.setOnClickListener {
-            (activity as? AuthActivity)?.navigateToLogin()
+        // Login redirect
+        binding.tvLogin.setOnClickListener {
+            findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
         }
     }
     
-    private fun observeViewModel() {
-        // Observe form validation errors
-        viewModel.nameError.observe(viewLifecycleOwner) { error ->
-            binding.tilName.error = error
-        }
-        
-        viewModel.emailError.observe(viewLifecycleOwner) { error ->
-            binding.tilEmail.error = error
-        }
-        
-        viewModel.phoneError.observe(viewLifecycleOwner) { error ->
-            binding.tilPhone.error = error
-        }
-        
-        viewModel.passwordError.observe(viewLifecycleOwner) { error ->
-            binding.tilPassword.error = error
-        }
-        
-        viewModel.confirmPasswordError.observe(viewLifecycleOwner) { error ->
-            binding.tilConfirmPassword.error = error
-        }
-        
-        // Observe register state
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.registerState.collect { result ->
-                    when (result) {
-                        is NetworkResult.Loading -> {
-                            showLoading(true)
-                        }
-                        is NetworkResult.Success -> {
-                            showLoading(false)
-                            Snackbar.make(binding.root, "Registration successful!", Snackbar.LENGTH_LONG).show()
-                            (activity as? AuthActivity)?.navigateToHome()
-                        }
-                        is NetworkResult.Error -> {
-                            showLoading(false)
-                            Snackbar.make(binding.root, result.message, Snackbar.LENGTH_LONG).show()
-                        }
-                    }
+    private fun setupObservers() {
+        viewModel.authState.observe(viewLifecycleOwner) { authState ->
+            when (authState) {
+                AuthViewModel.AuthState.AUTHENTICATING -> {
+                    binding.progressBar.visibility = View.VISIBLE
+                    binding.btnRegister.isEnabled = false
                 }
+                AuthViewModel.AuthState.AUTHENTICATED -> {
+                    binding.progressBar.visibility = View.GONE
+                    // Navigation is handled in AuthActivity
+                }
+                AuthViewModel.AuthState.AUTHENTICATION_FAILED -> {
+                    binding.progressBar.visibility = View.GONE
+                    binding.btnRegister.isEnabled = true
+                }
+                AuthViewModel.AuthState.UNAUTHENTICATED -> {
+                    binding.progressBar.visibility = View.GONE
+                    binding.btnRegister.isEnabled = true
+                }
+            }
+        }
+        
+        viewModel.errorMessage.observe(viewLifecycleOwner) { errorMessage ->
+            errorMessage?.let {
+                Snackbar.make(binding.root, it, Snackbar.LENGTH_LONG).show()
             }
         }
     }
     
-    private fun showLoading(isLoading: Boolean) {
-        if (isLoading) {
-            binding.btnRegister.isEnabled = false
-            (activity as? AuthActivity)?.showProgressBar(true)
-        } else {
-            binding.btnRegister.isEnabled = true
-            (activity as? AuthActivity)?.showProgressBar(false)
+    private fun attemptRegistration() {
+        val name = binding.etName.text.toString().trim()
+        val email = binding.etEmail.text.toString().trim()
+        val phone = binding.etPhone.text.toString().trim()
+        val password = binding.etPassword.text.toString().trim()
+        val confirmPassword = binding.etConfirmPassword.text.toString().trim()
+        
+        // Validate registration data
+        if (viewModel.validateRegistration(name, email, password, confirmPassword, phone)) {
+            // Attempt registration
+            viewModel.register(name, email, password, phone)
         }
     }
 

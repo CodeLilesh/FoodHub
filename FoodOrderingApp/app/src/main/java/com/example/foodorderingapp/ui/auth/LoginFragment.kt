@@ -6,21 +6,18 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.fragment.findNavController
+import com.example.foodorderingapp.R
 import com.example.foodorderingapp.databinding.FragmentLoginBinding
-import com.example.foodorderingapp.utils.NetworkResult
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class LoginFragment : Fragment() {
 
     private var _binding: FragmentLoginBinding? = null
     private val binding get() = _binding!!
-    
+
     private val viewModel: AuthViewModel by activityViewModels()
 
     override fun onCreateView(
@@ -35,70 +32,65 @@ class LoginFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        setupListeners()
-        observeViewModel()
+        setupUI()
+        setupObservers()
     }
     
-    private fun setupListeners() {
+    private fun setupUI() {
         // Login button click
         binding.btnLogin.setOnClickListener {
-            val email = binding.etEmail.text.toString().trim()
-            val password = binding.etPassword.text.toString().trim()
-            
-            viewModel.login(email, password)
+            attemptLogin()
         }
         
-        // Register tab navigation
-        binding.tvRegisterPrompt.setOnClickListener {
-            (activity as? AuthActivity)?.navigateToRegister()
+        // Register redirect
+        binding.tvRegister.setOnClickListener {
+            findNavController().navigate(R.id.action_loginFragment_to_registerFragment)
         }
         
         // Forgot password click
         binding.tvForgotPassword.setOnClickListener {
-            // Will implement later
-            Snackbar.make(binding.root, "Forgot password functionality will be added soon", Snackbar.LENGTH_SHORT).show()
+            // TODO: Implement forgot password feature
+            Snackbar.make(binding.root, "Forgot password feature coming soon", Snackbar.LENGTH_SHORT).show()
         }
     }
     
-    private fun observeViewModel() {
-        // Observe form validation errors
-        viewModel.emailError.observe(viewLifecycleOwner) { error ->
-            binding.tilEmail.error = error
-        }
-        
-        viewModel.passwordError.observe(viewLifecycleOwner) { error ->
-            binding.tilPassword.error = error
-        }
-        
-        // Observe login state
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.loginState.collect { result ->
-                    when (result) {
-                        is NetworkResult.Loading -> {
-                            showLoading(true)
-                        }
-                        is NetworkResult.Success -> {
-                            showLoading(false)
-                            (activity as? AuthActivity)?.navigateToHome()
-                        }
-                        is NetworkResult.Error -> {
-                            showLoading(false)
-                            Snackbar.make(binding.root, result.message, Snackbar.LENGTH_LONG).show()
-                        }
-                    }
+    private fun setupObservers() {
+        viewModel.authState.observe(viewLifecycleOwner) { authState ->
+            when (authState) {
+                AuthViewModel.AuthState.AUTHENTICATING -> {
+                    binding.progressBar.visibility = View.VISIBLE
+                    binding.btnLogin.isEnabled = false
                 }
+                AuthViewModel.AuthState.AUTHENTICATED -> {
+                    binding.progressBar.visibility = View.GONE
+                    // Navigation is handled in AuthActivity
+                }
+                AuthViewModel.AuthState.AUTHENTICATION_FAILED -> {
+                    binding.progressBar.visibility = View.GONE
+                    binding.btnLogin.isEnabled = true
+                }
+                AuthViewModel.AuthState.UNAUTHENTICATED -> {
+                    binding.progressBar.visibility = View.GONE
+                    binding.btnLogin.isEnabled = true
+                }
+            }
+        }
+        
+        viewModel.errorMessage.observe(viewLifecycleOwner) { errorMessage ->
+            errorMessage?.let {
+                Snackbar.make(binding.root, it, Snackbar.LENGTH_LONG).show()
             }
         }
     }
     
-    private fun showLoading(isLoading: Boolean) {
-        if (isLoading) {
-            binding.btnLogin.isEnabled = false
-            (activity as? AuthActivity)?.showProgressBar(true)
-        } else {
-            binding.btnLogin.isEnabled = true
-            (activity as? AuthActivity)?.showProgressBar(false)
+    private fun attemptLogin() {
+        val email = binding.etEmail.text.toString().trim()
+        val password = binding.etPassword.text.toString().trim()
+        
+        // Validate input
+        if (viewModel.validateLogin(email, password)) {
+            // Attempt login
+            viewModel.login(email, password)
         }
     }
 
