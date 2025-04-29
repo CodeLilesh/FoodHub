@@ -1,110 +1,141 @@
 package com.example.foodorderingapp.data.repository
 
-import android.content.Context
-import com.example.foodorderingapp.data.api.CreateOrderRequest
-import com.example.foodorderingapp.data.api.OrderItemRequest
-import com.example.foodorderingapp.data.api.RetrofitClient
-import com.example.foodorderingapp.data.models.CartItem
-import com.example.foodorderingapp.data.models.Order
-import com.example.foodorderingapp.utils.Result
-import com.example.foodorderingapp.utils.SessionManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.example.foodorderingapp.data.local.CartDao
+import com.example.foodorderingapp.data.local.OrderDao
+import com.example.foodorderingapp.data.model.CartItem
+import com.example.foodorderingapp.data.model.Order
+import com.example.foodorderingapp.data.remote.ApiService
+import com.example.foodorderingapp.utils.NetworkResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import java.io.IOException
 
-class OrderRepository(private val context: Context) {
+class OrderRepository(
+    private val apiService: ApiService,
+    private val orderDao: OrderDao,
+    private val cartDao: CartDao
+) {
+    // Get user orders from local database
+    fun getUserOrders(userId: Int): Flow<List<Order>> = orderDao.getOrdersByUser(userId)
     
-    private val apiService = RetrofitClient.apiService
-    private val sessionManager = SessionManager(context)
+    // Get order by ID from local database
+    fun getOrderById(orderId: Int): Flow<Order?> = orderDao.getOrderById(orderId)
     
-    suspend fun getUserOrders(): Result<List<Order>> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
-            }
-            
-            val response = apiService.getUserOrders(token)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val orders = response.body()?.data ?: emptyList()
-                return@withContext Result.Success(orders)
-            }
-            
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to get orders"
-            return@withContext Result.Error(errorMessage)
-        } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
-        }
-    }
+    // Get orders by status from local database
+    fun getOrdersByStatus(userId: Int, status: String): Flow<List<Order>> = 
+        orderDao.getOrdersByStatus(userId, status)
     
-    suspend fun getOrderById(orderId: Int): Result<Order> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
-            }
-            
-            val response = apiService.getOrderById(token, orderId)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val order = response.body()?.data
-                if (order != null) {
-                    return@withContext Result.Success(order)
-                }
-            }
-            
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to get order details"
-            return@withContext Result.Error(errorMessage)
-        } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
-        }
-    }
-    
-    suspend fun createOrder(
+    // Place a new order
+    suspend fun placeOrder(
+        userId: Int,
         restaurantId: Int,
-        cartItems: List<CartItem>,
         deliveryAddress: String,
         paymentMethod: String,
-        specialInstructions: String?
-    ): Result<Order> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
+        specialInstructions: String? = null
+    ): NetworkResult<Order> {
+        return try {
+            // Get cart items
+            val cartItems = cartDao.getAllCartItems().first()
+            
+            if (cartItems.isEmpty()) {
+                return NetworkResult.Error("Your cart is empty")
             }
             
-            // Convert cart items to order items
+            // Calculate total amount
+            val subtotal = cartItems.sumOf { it.price * it.quantity }
+            val deliveryFee = 5.0 // Fixed delivery fee or fetch from restaurant
+            val totalAmount = subtotal + deliveryFee
+            
+            // Create order data
             val orderItems = cartItems.map { cartItem ->
-                OrderItemRequest(
-                    menu_item_id = cartItem.menuItemId,
-                    quantity = cartItem.quantity
+                mapOf(
+                    "menu_item_id" to cartItem.menuItemId,
+                    "name" to cartItem.name,
+                    "price" to cartItem.price,
+                    "quantity" to cartItem.quantity,
+                    "special_instructions" to cartItem.instructions
                 )
             }
             
-            val orderRequest = CreateOrderRequest(
-                restaurant_id = restaurantId,
-                items = orderItems,
-                delivery_address = deliveryAddress,
-                payment_method = paymentMethod,
-                special_instructions = specialInstructions
+            val orderData = mapOf(
+                "user_id" to userId,
+                "restaurant_id" to restaurantId,
+                "items" to orderItems,
+                "total_amount" to totalAmount,
+                "delivery_address" to deliveryAddress,
+                "payment_method" to paymentMethod,
+                "delivery_fee" to deliveryFee,
+                "special_instructions" to specialInstructions
             )
             
-            val response = apiService.createOrder(token, orderRequest)
+            // Place order via API
+            val response = apiService.createOrder(orderData as Map<String, Any>)
             
-            if (response.isSuccessful && response.body()?.success == true) {
-                val order = response.body()?.data
+            if (response.isSuccessful) {
+                val order = response.body()
                 if (order != null) {
-                    return@withContext Result.Success(order)
+                    // Save order to local database
+                    orderDao.insertOrder(order)
+                    
+                    // Clear cart
+                    cartDao.clearCart()
+                    
+                    return NetworkResult.Success(order)
                 }
             }
             
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to create order"
-            return@withContext Result.Error(errorMessage)
+            NetworkResult.Error("Failed to place order: ${response.message()}")
+            
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
+            NetworkResult.Error("An error occurred: ${e.message}")
+        }
+    }
+    
+    // Fetch user orders from API and update local database
+    suspend fun fetchAndCacheUserOrders(userId: Int): NetworkResult<List<Order>> {
+        return try {
+            val response = apiService.getUserOrders()
+            
+            if (response.isSuccessful) {
+                val orders = response.body()
+                if (!orders.isNullOrEmpty()) {
+                    orderDao.insertOrders(orders)
+                    NetworkResult.Success(orders)
+                } else {
+                    NetworkResult.Error("No orders found")
+                }
+            } else {
+                NetworkResult.Error("Failed to fetch orders: ${response.message()}")
+            }
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
+        } catch (e: Exception) {
+            NetworkResult.Error("An error occurred: ${e.message}")
+        }
+    }
+    
+    // Fetch order details from API and update local database
+    suspend fun fetchAndCacheOrderById(orderId: Int): NetworkResult<Order> {
+        return try {
+            val response = apiService.getOrderById(orderId)
+            
+            if (response.isSuccessful) {
+                val order = response.body()
+                if (order != null) {
+                    orderDao.insertOrder(order)
+                    NetworkResult.Success(order)
+                } else {
+                    NetworkResult.Error("Order not found")
+                }
+            } else {
+                NetworkResult.Error("Failed to fetch order: ${response.message()}")
+            }
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
+        } catch (e: Exception) {
+            NetworkResult.Error("An error occurred: ${e.message}")
         }
     }
 }

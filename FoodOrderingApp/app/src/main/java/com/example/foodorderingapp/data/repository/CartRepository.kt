@@ -1,83 +1,96 @@
 package com.example.foodorderingapp.data.repository
 
-import android.content.Context
-import com.example.foodorderingapp.data.local.AppDatabase
-import com.example.foodorderingapp.data.local.entity.CartItemEntity
-import com.example.foodorderingapp.data.models.CartItem
-import com.example.foodorderingapp.data.models.MenuItem
-import kotlinx.coroutines.Dispatchers
+import com.example.foodorderingapp.data.local.CartDao
+import com.example.foodorderingapp.data.model.CartItem
+import com.example.foodorderingapp.data.model.MenuItem
+import com.example.foodorderingapp.utils.NetworkResult
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
 
-class CartRepository(context: Context) {
+class CartRepository(
+    private val cartDao: CartDao
+) {
+    // Get all cart items
+    fun getAllCartItems(): Flow<List<CartItem>> = cartDao.getAllCartItems()
     
-    private val cartDao = AppDatabase.getInstance(context).cartDao()
+    // Get cart item count
+    fun getCartItemCount(): Flow<Int> = cartDao.getCartItemCount()
     
-    fun getCartItems(): Flow<List<CartItem>> {
-        return cartDao.getAllCartItems().map { entities ->
-            entities.map { it.toCartItem() }
-        }
-    }
+    // Get cart total
+    fun getCartTotal(): Flow<Double?> = cartDao.getCartTotal()
     
-    fun getCartItemsCount(): Flow<Int> {
-        return cartDao.getCartItemsCount()
-    }
-    
-    suspend fun addToCart(restaurantId: Int, menuItem: MenuItem, quantity: Int = 1): Long = withContext(Dispatchers.IO) {
-        // Check if restaurant ID matches existing cart items
-        val existingRestaurantId = cartDao.getRestaurantIdIfExists()
-        
-        if (existingRestaurantId != null && existingRestaurantId != restaurantId) {
-            // Clear cart if adding items from a different restaurant
-            cartDao.clearCart()
-        }
-        
-        // Check if item already exists in cart
-        val existingItem = cartDao.getCartItemByMenuItemId(menuItem.id)
-        
-        if (existingItem != null) {
-            // Update quantity of existing item
-            val updatedQuantity = existingItem.quantity + quantity
-            cartDao.updateQuantity(existingItem.menuItemId, updatedQuantity)
-            return@withContext existingItem.id.toLong()
-        } else {
-            // Add new item to cart
-            val cartItemEntity = CartItemEntity(
-                id = 0, // Room will auto-generate ID
-                restaurantId = restaurantId,
+    // Add item to cart
+    suspend fun addItemToCart(menuItem: MenuItem, quantity: Int, instructions: String? = null): NetworkResult<Long> {
+        return try {
+            // Check if the item is from the same restaurant as other items in cart
+            val cartRestaurantId = cartDao.getCartRestaurantId()
+            
+            if (cartRestaurantId != null && cartRestaurantId != menuItem.restaurantId) {
+                return NetworkResult.Error("Items in your cart are from a different restaurant. Clear cart before adding items from another restaurant.")
+            }
+            
+            val cartItem = CartItem(
                 menuItemId = menuItem.id,
+                restaurantId = menuItem.restaurantId,
                 name = menuItem.name,
-                description = menuItem.description,
-                imageUrl = menuItem.imageUrl,
-                pricePerItem = menuItem.price,
+                price = menuItem.price,
                 quantity = quantity,
-                isVegetarian = menuItem.isVegetarian
+                instructions = instructions,
+                imageUrl = menuItem.imageUrl
             )
             
-            return@withContext cartDao.insert(cartItemEntity)
+            val id = cartDao.addOrUpdateCartItem(cartItem)
+            NetworkResult.Success(id)
+            
+        } catch (e: Exception) {
+            NetworkResult.Error("Failed to add item to cart: ${e.message}")
         }
     }
     
-    suspend fun updateCartItemQuantity(cartItemId: Int, newQuantity: Int) = withContext(Dispatchers.IO) {
-        if (newQuantity <= 0) {
-            // Remove item if quantity is 0 or negative
-            cartDao.deleteById(cartItemId)
-        } else {
-            // Update quantity
-            cartDao.updateQuantityById(cartItemId, newQuantity)
+    // Update cart item quantity
+    suspend fun updateCartItemQuantity(cartItemId: Int, newQuantity: Int): NetworkResult<Unit> {
+        return try {
+            val cartItem = cartDao.getCartItemById(cartItemId)
+            
+            if (cartItem != null) {
+                if (newQuantity <= 0) {
+                    cartDao.deleteCartItem(cartItem)
+                } else {
+                    val updatedItem = cartItem.copy(quantity = newQuantity)
+                    cartDao.updateCartItem(updatedItem)
+                }
+                NetworkResult.Success(Unit)
+            } else {
+                NetworkResult.Error("Cart item not found")
+            }
+            
+        } catch (e: Exception) {
+            NetworkResult.Error("Failed to update cart item: ${e.message}")
         }
     }
     
-    suspend fun removeFromCart(cartItemId: Int) = withContext(Dispatchers.IO) {
-        cartDao.deleteById(cartItemId)
+    // Remove item from cart
+    suspend fun removeCartItem(cartItemId: Int): NetworkResult<Unit> {
+        return try {
+            cartDao.deleteCartItemById(cartItemId)
+            NetworkResult.Success(Unit)
+        } catch (e: Exception) {
+            NetworkResult.Error("Failed to remove item from cart: ${e.message}")
+        }
     }
     
-    suspend fun clearCart() = withContext(Dispatchers.IO) {
-        cartDao.clearCart()
+    // Clear cart
+    suspend fun clearCart(): NetworkResult<Unit> {
+        return try {
+            cartDao.clearCart()
+            NetworkResult.Success(Unit)
+        } catch (e: Exception) {
+            NetworkResult.Error("Failed to clear cart: ${e.message}")
+        }
     }
     
-    suspend fun getRestaurantId(): Int? = withContext(Dispatchers.IO) {
-        return@withContext cartDao.getRestaurantIdIfExists()
+    // Check if cart has items from multiple restaurants
+    suspend fun validateRestaurantId(restaurantId: Int): Boolean {
+        val currentRestaurantId = cartDao.getCartRestaurantId()
+        return currentRestaurantId == null || currentRestaurantId == restaurantId
     }
 }

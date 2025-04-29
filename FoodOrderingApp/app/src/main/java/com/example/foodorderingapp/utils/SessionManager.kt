@@ -1,79 +1,71 @@
 package com.example.foodorderingapp.utils
 
 import android.content.Context
-import android.content.SharedPreferences
-import com.example.foodorderingapp.data.models.User
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
-class SessionManager(context: Context) {
-    private var prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-    private var editor: SharedPreferences.Editor = prefs.edit()
-    
+// DataStore Singleton
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
+
+class SessionManager(private val context: Context) {
+
     companion object {
-        private const val PREF_NAME = "FoodOrderingAppPrefs"
-        private const val KEY_AUTH_TOKEN = "auth_token"
-        private const val KEY_USER_ID = "user_id"
-        private const val KEY_USER_NAME = "user_name"
-        private const val KEY_USER_EMAIL = "user_email"
+        private val AUTH_TOKEN = stringPreferencesKey("auth_token")
+        private val USER_ID = stringPreferencesKey("user_id")
+        private val USER_NAME = stringPreferencesKey("user_name")
+        private val USER_EMAIL = stringPreferencesKey("user_email")
     }
-    
-    /**
-     * Function to save auth token
-     */
-    fun saveAuthToken(token: String) {
-        editor.putString(KEY_AUTH_TOKEN, token)
-        editor.apply()
+
+    // Get Auth Token
+    val authToken: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[AUTH_TOKEN]
     }
-    
-    /**
-     * Function to get auth token
-     */
-    fun getAuthToken(): String? {
-        return prefs.getString(KEY_AUTH_TOKEN, null)
+
+    // Get User ID
+    val userId: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[USER_ID]
     }
-    
-    /**
-     * Function to save user information
-     */
-    fun saveUserInfo(userId: Int, name: String, email: String) {
-        editor.putInt(KEY_USER_ID, userId)
-        editor.putString(KEY_USER_NAME, name)
-        editor.putString(KEY_USER_EMAIL, email)
-        editor.apply()
+
+    // Get User Name
+    val userName: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[USER_NAME]
     }
-    
-    /**
-     * Function to get user ID
-     */
-    fun getUserId(): Int {
-        return prefs.getInt(KEY_USER_ID, Constants.DEFAULT_USER_ID)
+
+    // Get User Email
+    val userEmail: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[USER_EMAIL]
     }
-    
-    /**
-     * Function to get user name
-     */
-    fun getUserName(): String? {
-        return prefs.getString(KEY_USER_NAME, null)
+
+    // Check if user is logged in
+    val isLoggedIn: Flow<Boolean> = authToken.map { token ->
+        !token.isNullOrEmpty()
     }
-    
-    /**
-     * Function to get user email
-     */
-    fun getUserEmail(): String? {
-        return prefs.getString(KEY_USER_EMAIL, null)
+
+    // Save Auth Token
+    suspend fun saveAuthToken(token: String) {
+        context.dataStore.edit { preferences ->
+            preferences[AUTH_TOKEN] = token
+        }
     }
-    
-    /**
-     * Function to check if user is logged in
-     */
-    fun isLoggedIn(): Boolean {
-        return getAuthToken() != null
+
+    // Save User Details
+    suspend fun saveUserDetails(id: String, name: String, email: String) {
+        context.dataStore.edit { preferences ->
+            preferences[USER_ID] = id
+            preferences[USER_NAME] = name
+            preferences[USER_EMAIL] = email
+        }
     }
-    
-    /**
-     * Function to clear session
-     */
-    fun clearSession() {
-        editor.clear()
-        editor.apply()
+
+    // Clear Session
+    suspend fun clearSession() {
+        context.dataStore.edit { preferences ->
+            preferences.clear()
+        }
     }
 }

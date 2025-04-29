@@ -1,180 +1,167 @@
 package com.example.foodorderingapp.data.repository
 
-import android.content.Context
-import com.example.foodorderingapp.data.api.RetrofitClient
-import com.example.foodorderingapp.data.models.MenuItem
-import com.example.foodorderingapp.data.models.Restaurant
-import com.example.foodorderingapp.utils.Result
-import com.example.foodorderingapp.utils.SessionManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.example.foodorderingapp.data.local.RestaurantDao
+import com.example.foodorderingapp.data.model.MenuItem
+import com.example.foodorderingapp.data.model.Restaurant
+import com.example.foodorderingapp.data.remote.ApiService
+import com.example.foodorderingapp.utils.NetworkResult
+import kotlinx.coroutines.flow.Flow
+import java.io.IOException
 
-class RestaurantRepository(private val context: Context) {
+class RestaurantRepository(
+    private val apiService: ApiService,
+    private val restaurantDao: RestaurantDao
+) {
+    // Get all restaurants from local database
+    fun getAllRestaurants(): Flow<List<Restaurant>> = restaurantDao.getAllRestaurants()
     
-    private val apiService = RetrofitClient.apiService
-    private val sessionManager = SessionManager(context)
+    // Get restaurant by ID from local database
+    fun getRestaurantById(id: Int): Flow<Restaurant?> = restaurantDao.getRestaurantById(id)
     
-    suspend fun getAllRestaurants(): Result<List<Restaurant>> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
+    // Get restaurants by cuisine from local database
+    fun getRestaurantsByCuisine(cuisine: String): Flow<List<Restaurant>> = 
+        restaurantDao.getRestaurantsByCuisine(cuisine)
+    
+    // Get popular restaurants (rating >= 4.0) from local database
+    fun getPopularRestaurants(): Flow<List<Restaurant>> = restaurantDao.getRestaurantsByRating(4.0)
+    
+    // Search restaurants in local database
+    fun searchRestaurants(query: String): Flow<List<Restaurant>> = 
+        restaurantDao.searchRestaurants(query)
+    
+    // Fetch all restaurants from API and update local database
+    suspend fun fetchAndCacheAllRestaurants(): NetworkResult<List<Restaurant>> {
+        return try {
+            val response = apiService.getAllRestaurants()
+            
+            if (response.isSuccessful) {
+                val restaurants = response.body()
+                if (!restaurants.isNullOrEmpty()) {
+                    restaurantDao.insertRestaurants(restaurants)
+                    NetworkResult.Success(restaurants)
+                } else {
+                    NetworkResult.Error("No restaurants found")
+                }
+            } else {
+                NetworkResult.Error("Failed to fetch restaurants: ${response.message()}")
             }
-            
-            val response = apiService.getAllRestaurants(token)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val restaurants = response.body()?.data ?: emptyList()
-                return@withContext Result.Success(restaurants)
-            }
-            
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to get restaurants"
-            return@withContext Result.Error(errorMessage)
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
+            NetworkResult.Error("An error occurred: ${e.message}")
         }
     }
     
-    suspend fun getRestaurantsByCategory(category: String): Result<List<Restaurant>> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
-            }
+    // Fetch restaurant by ID from API and update local database
+    suspend fun fetchAndCacheRestaurantById(id: Int): NetworkResult<Restaurant> {
+        return try {
+            val response = apiService.getRestaurantById(id)
             
-            // If category is "All", get all restaurants
-            if (category.equals("All", ignoreCase = true)) {
-                return@withContext getAllRestaurants()
-            }
-            
-            val response = apiService.getRestaurantsByCategory(token, category)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val restaurants = response.body()?.data ?: emptyList()
-                return@withContext Result.Success(restaurants)
-            }
-            
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to get restaurants by category"
-            return@withContext Result.Error(errorMessage)
-        } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
-        }
-    }
-    
-    suspend fun searchRestaurants(query: String): Result<List<Restaurant>> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
-            }
-            
-            val response = apiService.searchRestaurants(token, query)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val restaurants = response.body()?.data ?: emptyList()
-                return@withContext Result.Success(restaurants)
-            }
-            
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to search restaurants"
-            return@withContext Result.Error(errorMessage)
-        } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
-        }
-    }
-    
-    suspend fun getRestaurantById(restaurantId: Int): Result<Restaurant> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
-            }
-            
-            val response = apiService.getRestaurantById(token, restaurantId)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val restaurant = response.body()?.data
+            if (response.isSuccessful) {
+                val restaurant = response.body()
                 if (restaurant != null) {
-                    return@withContext Result.Success(restaurant)
+                    restaurantDao.insertRestaurant(restaurant)
+                    NetworkResult.Success(restaurant)
+                } else {
+                    NetworkResult.Error("Restaurant not found")
                 }
+            } else {
+                NetworkResult.Error("Failed to fetch restaurant: ${response.message()}")
             }
-            
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to get restaurant"
-            return@withContext Result.Error(errorMessage)
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
+            NetworkResult.Error("An error occurred: ${e.message}")
         }
     }
     
-    suspend fun getRestaurantMenu(restaurantId: Int): Result<List<MenuItem>> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
+    // Fetch restaurants by category from API and update local database
+    suspend fun fetchAndCacheRestaurantsByCategory(category: String): NetworkResult<List<Restaurant>> {
+        return try {
+            val response = apiService.getRestaurantsByCategory(category)
+            
+            if (response.isSuccessful) {
+                val restaurants = response.body()
+                if (!restaurants.isNullOrEmpty()) {
+                    restaurantDao.insertRestaurants(restaurants)
+                    NetworkResult.Success(restaurants)
+                } else {
+                    NetworkResult.Error("No restaurants found for category: $category")
+                }
+            } else {
+                NetworkResult.Error("Failed to fetch restaurants: ${response.message()}")
             }
-            
-            val response = apiService.getRestaurantMenu(token, restaurantId)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val menuItems = response.body()?.data ?: emptyList()
-                return@withContext Result.Success(menuItems)
-            }
-            
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to get menu"
-            return@withContext Result.Error(errorMessage)
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
+            NetworkResult.Error("An error occurred: ${e.message}")
         }
     }
     
-    suspend fun getRestaurantMenuByCategory(restaurantId: Int, category: String): Result<List<MenuItem>> = 
-        withContext(Dispatchers.IO) {
-            try {
-                // Check if token exists
-                val token = sessionManager.getAuthToken()
-                if (token.isNullOrEmpty()) {
-                    return@withContext Result.Error("Not authenticated")
-                }
-                
-                val response = apiService.getRestaurantMenuByCategory(token, restaurantId, category)
-                
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val menuItems = response.body()?.data ?: emptyList()
-                    return@withContext Result.Success(menuItems)
-                }
-                
-                val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to get menu by category"
-                return@withContext Result.Error(errorMessage)
-            } catch (e: Exception) {
-                return@withContext Result.Error(e.message ?: "Network error occurred")
-            }
-        }
-    
-    suspend fun getMenuItemById(menuItemId: Int): Result<MenuItem> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
-            }
+    // Search restaurants via API and update local database
+    suspend fun fetchAndCacheSearchResults(query: String): NetworkResult<List<Restaurant>> {
+        return try {
+            val response = apiService.searchRestaurants(query)
             
-            val response = apiService.getMenuItemById(token, menuItemId)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val menuItem = response.body()?.data
-                if (menuItem != null) {
-                    return@withContext Result.Success(menuItem)
+            if (response.isSuccessful) {
+                val restaurants = response.body()
+                if (!restaurants.isNullOrEmpty()) {
+                    restaurantDao.insertRestaurants(restaurants)
+                    NetworkResult.Success(restaurants)
+                } else {
+                    NetworkResult.Error("No restaurants found for: $query")
                 }
+            } else {
+                NetworkResult.Error("Failed to search restaurants: ${response.message()}")
             }
-            
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to get menu item"
-            return@withContext Result.Error(errorMessage)
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
+            NetworkResult.Error("An error occurred: ${e.message}")
+        }
+    }
+    
+    // Fetch menu items for a restaurant from API
+    suspend fun fetchMenuItemsByRestaurant(restaurantId: Int): NetworkResult<List<MenuItem>> {
+        return try {
+            val response = apiService.getMenuItemsByRestaurant(restaurantId)
+            
+            if (response.isSuccessful) {
+                val menuItems = response.body()
+                if (!menuItems.isNullOrEmpty()) {
+                    NetworkResult.Success(menuItems)
+                } else {
+                    NetworkResult.Error("No menu items found for restaurant")
+                }
+            } else {
+                NetworkResult.Error("Failed to fetch menu items: ${response.message()}")
+            }
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
+        } catch (e: Exception) {
+            NetworkResult.Error("An error occurred: ${e.message}")
+        }
+    }
+    
+    // Fetch menu items by category for a restaurant from API
+    suspend fun fetchMenuItemsByCategory(restaurantId: Int, category: String): NetworkResult<List<MenuItem>> {
+        return try {
+            val response = apiService.getMenuItemsByCategory(restaurantId, category)
+            
+            if (response.isSuccessful) {
+                val menuItems = response.body()
+                if (!menuItems.isNullOrEmpty()) {
+                    NetworkResult.Success(menuItems)
+                } else {
+                    NetworkResult.Error("No menu items found for category: $category")
+                }
+            } else {
+                NetworkResult.Error("Failed to fetch menu items: ${response.message()}")
+            }
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
+        } catch (e: Exception) {
+            NetworkResult.Error("An error occurred: ${e.message}")
         }
     }
 }

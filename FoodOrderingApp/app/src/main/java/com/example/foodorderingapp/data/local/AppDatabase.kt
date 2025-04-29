@@ -1,43 +1,26 @@
 package com.example.foodorderingapp.data.local
 
-import android.content.Context
 import androidx.room.Database
-import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import com.example.foodorderingapp.data.local.dao.CartDao
-import com.example.foodorderingapp.data.local.dao.UserDao
-import com.example.foodorderingapp.data.local.entity.CartItemEntity
-import com.example.foodorderingapp.data.local.entity.UserEntity
-import com.example.foodorderingapp.utils.DateConverter
+import com.example.foodorderingapp.data.model.*
 
 @Database(
-    entities = [CartItemEntity::class, UserEntity::class],
+    entities = [
+        User::class,
+        Restaurant::class,
+        MenuItem::class,
+        Order::class,
+        CartItem::class
+    ],
     version = 1,
     exportSchema = false
 )
-@TypeConverters(DateConverter::class)
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
-    
-    abstract fun cartDao(): CartDao
     abstract fun userDao(): UserDao
-    
-    companion object {
-        @Volatile
-        private var INSTANCE: AppDatabase? = null
-        
-        fun getInstance(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "food_ordering_app_database"
-                )
-                .fallbackToDestructiveMigration()
-                .build()
-                INSTANCE = instance
-                instance
-            }
-        }
-    }
+    abstract fun restaurantDao(): RestaurantDao
+    abstract fun menuItemDao(): MenuItemDao
+    abstract fun orderDao(): OrderDao
+    abstract fun cartDao(): CartDao
 }

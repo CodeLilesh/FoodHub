@@ -1,163 +1,138 @@
 package com.example.foodorderingapp.data.repository
 
-import android.content.Context
-import com.example.foodorderingapp.data.api.RetrofitClient
-import com.example.foodorderingapp.data.api.UpdateUserRequest
-import com.example.foodorderingapp.data.api.LoginRequest
-import com.example.foodorderingapp.data.api.RegisterRequest
-import com.example.foodorderingapp.data.local.AppDatabase
-import com.example.foodorderingapp.data.local.entity.UserEntity
-import com.example.foodorderingapp.data.models.User
-import com.example.foodorderingapp.utils.Constants
-import com.example.foodorderingapp.utils.Result
+import com.example.foodorderingapp.data.local.UserDao
+import com.example.foodorderingapp.data.model.User
+import com.example.foodorderingapp.data.remote.ApiService
+import com.example.foodorderingapp.utils.NetworkResult
 import com.example.foodorderingapp.utils.SessionManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.Flow
+import retrofit2.Response
+import java.io.IOException
 
-class UserRepository(private val context: Context) {
+class UserRepository(
+    private val apiService: ApiService,
+    private val userDao: UserDao,
+    private val sessionManager: SessionManager
+) {
+    // Get current user from local database
+    fun getCurrentUser(userId: Int): Flow<User?> = userDao.getUserById(userId)
     
-    private val apiService = RetrofitClient.apiService
-    private val userDao = AppDatabase.getInstance(context).userDao()
-    private val sessionManager = SessionManager(context)
-    
-    suspend fun login(email: String, password: String): Result<User> = withContext(Dispatchers.IO) {
-        try {
-            val response = apiService.login(LoginRequest(email, password))
+    // Register user
+    suspend fun registerUser(name: String, email: String, password: String, phone: String): NetworkResult<User> {
+        return try {
+            val userData = mapOf(
+                "name" to name,
+                "email" to email,
+                "password" to password,
+                "phone" to phone
+            )
             
-            if (response.isSuccessful && response.body()?.success == true) {
-                val authResponse = response.body()!!
-                val token = authResponse.token
-                val user = authResponse.user
-                
-                if (token != null && user != null) {
-                    // Save user information
-                    sessionManager.saveAuthToken(token)
-                    sessionManager.saveUserInfo(user.id, user.name, user.email)
-                    
-                    // Cache user in database
-                    userDao.insertUser(UserEntity.fromUser(user))
-                    
-                    return@withContext Result.Success(user)
-                }
-            }
+            val response = apiService.register(userData)
+            handleAuthResponse(response)
             
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Login failed"
-            return@withContext Result.Error(errorMessage)
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
+            NetworkResult.Error("An error occurred: ${e.message}")
         }
     }
     
-    suspend fun register(name: String, email: String, password: String, phone: String?, address: String?): Result<User> = 
-        withContext(Dispatchers.IO) {
-            try {
-                val registerRequest = RegisterRequest(name, email, password, phone, address)
-                val response = apiService.register(registerRequest)
-                
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val authResponse = response.body()!!
-                    val token = authResponse.token
-                    val user = authResponse.user
-                    
-                    if (token != null && user != null) {
-                        // Save user information
-                        sessionManager.saveAuthToken(token)
-                        sessionManager.saveUserInfo(user.id, user.name, user.email)
-                        
-                        // Cache user in database
-                        userDao.insertUser(UserEntity.fromUser(user))
-                        
-                        return@withContext Result.Success(user)
-                    }
-                }
-                
-                val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Registration failed"
-                return@withContext Result.Error(errorMessage)
-            } catch (e: Exception) {
-                return@withContext Result.Error(e.message ?: "Network error occurred")
-            }
-        }
-    
-    suspend fun getUserProfile(): Result<User> = withContext(Dispatchers.IO) {
-        try {
-            // Check if token exists
-            val token = sessionManager.getAuthToken()
-            if (token.isNullOrEmpty()) {
-                return@withContext Result.Error("Not authenticated")
-            }
+    // Login user
+    suspend fun loginUser(email: String, password: String): NetworkResult<User> {
+        return try {
+            val loginData = mapOf(
+                "email" to email,
+                "password" to password
+            )
             
-            // First try to get from local cache
-            val userId = sessionManager.getUserId()
-            if (userId != Constants.DEFAULT_USER_ID) {
-                val cachedUser = userDao.getUserById(userId)
-                if (cachedUser != null) {
-                    return@withContext Result.Success(cachedUser.toUser())
-                }
-            }
+            val response = apiService.login(loginData)
+            handleAuthResponse(response)
             
-            // If not in cache, fetch from API
-            val response = apiService.getUserProfile(token)
-            
-            if (response.isSuccessful && response.body()?.success == true) {
-                val userResponse = response.body()!!
-                val user = userResponse.data
-                
-                if (user != null) {
-                    // Cache user in database
-                    userDao.insertUser(UserEntity.fromUser(user))
-                    
-                    return@withContext Result.Success(user)
-                }
-            }
-            
-            val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to get profile"
-            return@withContext Result.Error(errorMessage)
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            return@withContext Result.Error(e.message ?: "Network error occurred")
+            NetworkResult.Error("An error occurred: ${e.message}")
         }
     }
     
-    suspend fun updateUserProfile(name: String, email: String, phone: String?, address: String?): Result<User> = 
-        withContext(Dispatchers.IO) {
-            try {
-                // Check if token exists
-                val token = sessionManager.getAuthToken()
-                if (token.isNullOrEmpty()) {
-                    return@withContext Result.Error("Not authenticated")
-                }
+    // Handle auth response
+    private suspend fun handleAuthResponse(response: Response<com.example.foodorderingapp.data.remote.AuthResponse>): NetworkResult<User> {
+        if (response.isSuccessful) {
+            val authResponse = response.body()
+            if (authResponse != null) {
+                // Save auth token
+                sessionManager.saveAuthToken(authResponse.token)
                 
-                val updateRequest = UpdateUserRequest(name, email, phone, address)
-                val response = apiService.updateUserProfile(token, updateRequest)
+                // Save user details
+                sessionManager.saveUserDetails(
+                    authResponse.user.id.toString(),
+                    authResponse.user.name,
+                    authResponse.user.email
+                )
                 
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val userResponse = response.body()!!
-                    val user = userResponse.data
-                    
-                    if (user != null) {
-                        // Update session information
-                        sessionManager.saveUserInfo(user.id, user.name, user.email)
-                        
-                        // Update cache in database
-                        userDao.insertUser(UserEntity.fromUser(user))
-                        
-                        return@withContext Result.Success(user)
-                    }
-                }
+                // Save user to local database
+                userDao.insertUser(authResponse.user)
                 
-                val errorMessage = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to update profile"
-                return@withContext Result.Error(errorMessage)
-            } catch (e: Exception) {
-                return@withContext Result.Error(e.message ?: "Network error occurred")
+                return NetworkResult.Success(authResponse.user)
             }
         }
+        return NetworkResult.Error("Authentication failed: ${response.message()}")
+    }
     
-    fun logout() {
-        // Clear session
+    // Logout user
+    suspend fun logoutUser() {
+        userDao.clearUsers()
         sessionManager.clearSession()
-        
-        // Clear user cache
-        Thread {
-            AppDatabase.getInstance(context).clearAllTables()
-        }.start()
+    }
+    
+    // Update user profile
+    suspend fun updateUserProfile(userData: Map<String, String>): NetworkResult<User> {
+        return try {
+            val response = apiService.updateUserProfile(userData)
+            
+            if (response.isSuccessful) {
+                val user = response.body()
+                if (user != null) {
+                    // Update user in local database
+                    userDao.insertUser(user)
+                    
+                    // Update user session details
+                    sessionManager.saveUserDetails(
+                        user.id.toString(),
+                        user.name,
+                        user.email
+                    )
+                    
+                    return NetworkResult.Success(user)
+                }
+            }
+            NetworkResult.Error("Update failed: ${response.message()}")
+            
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
+        } catch (e: Exception) {
+            NetworkResult.Error("An error occurred: ${e.message}")
+        }
+    }
+    
+    // Fetch current user from API and update local database
+    suspend fun refreshCurrentUser(): NetworkResult<User> {
+        return try {
+            val response = apiService.getCurrentUser()
+            
+            if (response.isSuccessful) {
+                val user = response.body()
+                if (user != null) {
+                    userDao.insertUser(user)
+                    return NetworkResult.Success(user)
+                }
+            }
+            NetworkResult.Error("Failed to refresh user: ${response.message()}")
+            
+        } catch (e: IOException) {
+            NetworkResult.Error("Network error: ${e.message}")
+        } catch (e: Exception) {
+            NetworkResult.Error("An error occurred: ${e.message}")
+        }
     }
 }
