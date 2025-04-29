@@ -26,10 +26,6 @@ class RestaurantAdapter(
     override fun onBindViewHolder(holder: RestaurantViewHolder, position: Int) {
         val restaurant = getItem(position)
         holder.bind(restaurant)
-        
-        holder.itemView.setOnClickListener {
-            onRestaurantClick(restaurant)
-        }
     }
 
     inner class RestaurantViewHolder(
@@ -39,7 +35,7 @@ class RestaurantAdapter(
         fun bind(restaurant: Restaurant) {
             binding.apply {
                 tvRestaurantName.text = restaurant.name
-                tvRestaurantCategory.text = restaurant.cuisine
+                tvRestaurantCuisine.text = restaurant.cuisine
                 ratingBar.rating = restaurant.rating.toFloat()
                 tvDeliveryTime.text = "${restaurant.deliveryTime} min"
                 
@@ -50,6 +46,11 @@ class RestaurantAdapter(
                     .error(R.drawable.placeholder_restaurant)
                     .centerCrop()
                     .into(ivRestaurantImage)
+                
+                // Set click listener
+                root.setOnClickListener {
+                    onRestaurantClick(restaurant)
+                }
             }
         }
     }

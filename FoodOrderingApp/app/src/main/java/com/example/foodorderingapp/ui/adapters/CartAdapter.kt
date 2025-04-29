@@ -40,32 +40,32 @@ class CartAdapter(
         fun bind(cartItem: CartItem) {
             binding.apply {
                 tvItemName.text = cartItem.name
-                tvItemPrice.text = numberFormat.format(cartItem.price)
+                tvItemPrice.text = numberFormat.format(cartItem.price * cartItem.quantity)
                 tvQuantity.text = cartItem.quantity.toString()
-                
+
                 // Load food image
-                Glide.with(ivFoodImage.context)
+                Glide.with(ivItemImage.context)
                     .load(cartItem.imageUrl)
                     .placeholder(R.drawable.placeholder_restaurant)
                     .error(R.drawable.placeholder_restaurant)
                     .centerCrop()
-                    .into(ivFoodImage)
-                
-                // Set click listeners
-                ibRemove.setOnClickListener {
+                    .into(ivItemImage)
+
+                // Setup remove button
+                btnRemove.setOnClickListener {
                     onRemoveClick(cartItem)
                 }
-                
-                ibDecrease.setOnClickListener {
+
+                // Setup quantity controls
+                btnDecrease.setOnClickListener {
                     if (cartItem.quantity > 1) {
                         onQuantityChange(cartItem, cartItem.quantity - 1)
                     } else {
-                        // If quantity is 1, remove the item
                         onRemoveClick(cartItem)
                     }
                 }
-                
-                ibIncrease.setOnClickListener {
+
+                btnIncrease.setOnClickListener {
                     onQuantityChange(cartItem, cartItem.quantity + 1)
                 }
             }
