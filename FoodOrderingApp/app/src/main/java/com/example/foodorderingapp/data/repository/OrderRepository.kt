@@ -1,118 +1,149 @@
 package com.example.foodorderingapp.data.repository
 
-import android.util.Log
 import com.example.foodorderingapp.api.ApiService
-import com.example.foodorderingapp.data.model.OrderTrackingResponse
-import com.example.foodorderingapp.data.model.OrderTrackingUpdate
-import com.example.foodorderingapp.data.socket.OrderTrackingSocket
-import com.example.foodorderingapp.data.socket.SocketConnectionState
-import com.example.foodorderingapp.util.Constants
+import com.example.foodorderingapp.data.db.dao.OrderDao
+import com.example.foodorderingapp.data.db.dao.OrderItemDao
+import com.example.foodorderingapp.data.models.Order
+import com.example.foodorderingapp.data.models.OrderItem
 import com.example.foodorderingapp.util.NetworkResult
+import com.example.foodorderingapp.util.handleApiResponse
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Repository class for handling order-related operations
+ * Repository for Order-related operations
+ * Handles data operations between the API and local database
  */
 @Singleton
 class OrderRepository @Inject constructor(
     private val apiService: ApiService,
-    private val sessionManager: SessionManager
+    private val orderDao: OrderDao,
+    private val orderItemDao: OrderItemDao
 ) {
-    private val TAG = "OrderRepository"
-    
-    // Cached tracking socket instance
-    private var orderTrackingSocket: OrderTrackingSocket? = null
-    
+
     /**
-     * Get order tracking data from API
+     * Create a new order and return the order ID
      */
-    suspend fun getOrderTracking(orderId: String): Flow<NetworkResult<OrderTrackingResponse>> = flow {
-        emit(NetworkResult.Loading())
-        
-        try {
-            val token = sessionManager.getAuthToken() ?: throw Exception("Authentication required")
-            val response = apiService.getOrderTracking("Bearer $token", orderId)
+    suspend fun createOrder(order: Order, orderItems: List<OrderItem>): NetworkResult<String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.createOrder(order, orderItems)
+                val result = handleApiResponse(response)
+                
+                if (result is NetworkResult.Success) {
+                    // Save order and items to local database
+                    orderDao.insertOrder(order)
+                    orderItemDao.insertOrderItems(orderItems)
+                }
+                
+                result
+            } catch (e: Exception) {
+                NetworkResult.Error("Network error: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Get order by ID from local database or API
+     */
+    suspend fun getOrderById(orderId: String): Order? {
+        return withContext(Dispatchers.IO) {
+            // First try to get from local database
+            var order = orderDao.getOrderById(orderId)
             
-            if (response.isSuccessful) {
-                response.body()?.let {
-                    emit(NetworkResult.Success(it))
-                } ?: emit(NetworkResult.Error("Empty response body"))
-            } else {
-                emit(NetworkResult.Error("Error ${response.code()}: ${response.message()}"))
+            // If not found locally, try to fetch from API
+            if (order == null) {
+                try {
+                    val response = apiService.getOrderById(orderId)
+                    if (response.isSuccessful && response.body() != null) {
+                        order = response.body()
+                        // Save to local database
+                        order?.let { orderDao.insertOrder(it) }
+                    }
+                } catch (e: Exception) {
+                    // Handle network error
+                    null
+                }
+            }
+            
+            order
+        }
+    }
+
+    /**
+     * Get order items for a specific order
+     */
+    suspend fun getOrderItems(orderId: String): List<OrderItem> {
+        return withContext(Dispatchers.IO) {
+            // First try to get from local database
+            var items = orderItemDao.getOrderItems(orderId)
+            
+            // If not found locally, try to fetch from API
+            if (items.isEmpty()) {
+                try {
+                    val response = apiService.getOrderItems(orderId)
+                    if (response.isSuccessful && response.body() != null) {
+                        items = response.body() ?: emptyList()
+                        // Save to local database
+                        if (items.isNotEmpty()) {
+                            orderItemDao.insertOrderItems(items)
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Handle network error
+                    emptyList()
+                }
+            }
+            
+            items
+        }
+    }
+
+    /**
+     * Get all orders for current user as a Flow
+     */
+    fun getUserOrders(): Flow<List<Order>> = flow {
+        // Emit from database first
+        val localOrders = orderDao.getAllOrders()
+        emit(localOrders)
+        
+        // Then try to fetch fresh data from API
+        try {
+            val response = apiService.getUserOrders()
+            if (response.isSuccessful && response.body() != null) {
+                val orders = response.body() ?: emptyList()
+                // Update local database
+                orderDao.insertOrders(orders)
+                // Emit new data (will be fetched automatically through Room Flow)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "getOrderTracking: ${e.message}")
-            emit(NetworkResult.Error(e.message ?: "Unknown error"))
+            // Error already handled by emitting local data first
         }
-    }
-    
+    }.flowOn(Dispatchers.IO)
+
     /**
-     * Connect to the WebSocket for real-time order tracking
+     * Get order tracking updates from API
      */
-    fun connectToOrderTracking(): OrderTrackingSocket {
-        // Return existing instance if already connected
-        orderTrackingSocket?.let {
-            if (it.connectionState.value == SocketConnectionState.CONNECTED) {
-                return it
+    suspend fun refreshOrderStatus(orderId: String): NetworkResult<Order> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.getOrderById(orderId)
+                val result = handleApiResponse(response)
+                
+                if (result is NetworkResult.Success) {
+                    // Update local database
+                    result.data?.let { orderDao.insertOrder(it) }
+                }
+                
+                result
+            } catch (e: Exception) {
+                NetworkResult.Error("Network error: ${e.message}")
             }
         }
-        
-        // Create new socket instance
-        val token = sessionManager.getAuthToken() ?: throw IllegalStateException("Authentication required")
-        val socket = OrderTrackingSocket(token)
-        orderTrackingSocket = socket
-        socket.connect()
-        
-        return socket
-    }
-    
-    /**
-     * Subscribe to order updates for a specific order
-     */
-    fun subscribeToOrderUpdates(orderId: String) {
-        val socket = getOrCreateSocket()
-        if (socket.connectionState.value == SocketConnectionState.CONNECTED) {
-            socket.subscribeToOrder(orderId)
-        } else {
-            Log.e(TAG, "Cannot subscribe: Socket not connected")
-        }
-    }
-    
-    /**
-     * Disconnect from WebSocket
-     */
-    fun disconnectFromOrderTracking() {
-        orderTrackingSocket?.disconnect()
-    }
-    
-    /**
-     * Cancel an order
-     */
-    suspend fun cancelOrder(orderId: String): Flow<NetworkResult<Boolean>> = flow {
-        emit(NetworkResult.Loading())
-        
-        try {
-            val token = sessionManager.getAuthToken() ?: throw Exception("Authentication required")
-            val response = apiService.cancelOrder("Bearer $token", orderId)
-            
-            if (response.isSuccessful) {
-                emit(NetworkResult.Success(true))
-            } else {
-                emit(NetworkResult.Error("Error ${response.code()}: ${response.message()}"))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "cancelOrder: ${e.message}")
-            emit(NetworkResult.Error(e.message ?: "Unknown error"))
-        }
-    }
-    
-    /**
-     * Get or create a WebSocket instance
-     */
-    private fun getOrCreateSocket(): OrderTrackingSocket {
-        return orderTrackingSocket ?: connectToOrderTracking()
     }
 }

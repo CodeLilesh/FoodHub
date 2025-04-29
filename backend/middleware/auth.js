@@ -1,26 +1,41 @@
 const jwt = require('jsonwebtoken');
+const { Pool } = require('pg');
 
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'foodappjwtsecret';
+// Database connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
 
-// Middleware to authenticate JWT token
-module.exports = (req, res, next) => {
-  // Get token from header
-  const token = req.header('x-auth-token');
-  
-  // Check if no token
-  if (!token) {
-    return res.status(401).json({ success: false, message: 'No token, authorization denied' });
-  }
-  
+// Middleware to authenticate users
+const authenticate = async (req, res, next) => {
   try {
-    // Verify token
-    const decoded = jwt.verify(token, JWT_SECRET);
+    // Get token from header
+    const token = req.header('Authorization')?.replace('Bearer ', '');
     
-    // Add user from payload to request
-    req.user = decoded.user;
+    if (!token) {
+      return res.status(401).json({ message: 'No token, authorization denied' });
+    }
+    
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if user exists
+    const result = await pool.query(
+      'SELECT * FROM users WHERE id = $1',
+      [decoded.userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+    
+    // Set user in request
+    req.user = result.rows[0];
     next();
-  } catch (error) {
-    res.status(401).json({ success: false, message: 'Token is not valid' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(401).json({ message: 'Token is not valid' });
   }
 };
+
+module.exports = authenticate;

@@ -2,17 +2,16 @@ package com.example.foodorderingapp
 
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
-import timber.log.Timber
 
+/**
+ * Base Application class for the Food Ordering App
+ * Annotated with @HiltAndroidApp to enable Hilt dependency injection
+ */
 @HiltAndroidApp
 class FoodOrderingApplication : Application() {
     
     override fun onCreate() {
         super.onCreate()
-        
-        // Initialize Timber for logging
-        if (BuildConfig.DEBUG) {
-            Timber.plant(Timber.DebugTree())
-        }
+        // Initialize any required libraries or configurations here
     }
 }

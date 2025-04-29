@@ -4,43 +4,72 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="8dp">
+    android:paddingVertical="8dp">
 
-    <TextView
-        android:id="@+id/tvItemQuantity"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_status_active"
-        android:gravity="center"
-        android:minWidth="24dp"
-        android:minHeight="24dp"
-        android:textColor="@color/white"
-        android:textSize="12sp"
-        android:textStyle="bold"
+    <ImageView
+        android:id="@+id/itemImageView"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:background="@drawable/bg_rounded_image"
+        android:scaleType="centerCrop"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        tools:text="2" />
+        tools:src="@drawable/placeholder_food" />
 
     <TextView
-        android:id="@+id/tvItemName"
+        android:id="@+id/itemNameText"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
         android:layout_marginEnd="8dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textColor="@color/black"
         android:textSize="14sp"
-        app:layout_constraintEnd_toStartOf="@+id/tvItemPrice"
-        app:layout_constraintStart_toEndOf="@+id/tvItemQuantity"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:text="Chicken Burger" />
+        app:layout_constraintEnd_toStartOf="@+id/itemPriceText"
+        app:layout_constraintStart_toEndOf="@+id/itemImageView"
+        app:layout_constraintTop_toTopOf="@+id/itemImageView"
+        tools:text="Chicken Burger with Cheese and extra sauce" />
 
     <TextView
-        android:id="@+id/tvItemPrice"
+        android:id="@+id/itemQuantityText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/gray"
+        android:textSize="12sp"
+        app:layout_constraintStart_toEndOf="@+id/itemImageView"
+        app:layout_constraintTop_toBottomOf="@+id/itemNameText"
+        tools:text="Qty: 2" />
+
+    <TextView
+        android:id="@+id/itemSpecialInstructionsText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginEnd="8dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/dark_gray"
+        android:textSize="12sp"
+        android:textStyle="italic"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/itemImageView"
+        app:layout_constraintTop_toBottomOf="@+id/itemQuantityText"
+        tools:text="No onions, extra sauce" />
+
+    <TextView
+        android:id="@+id/itemPriceText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/primary"
         android:textSize="14sp"
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:text="$12.99" />
+        app:layout_constraintTop_toTopOf="@+id/itemImageView"
+        tools:text="$15.99" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

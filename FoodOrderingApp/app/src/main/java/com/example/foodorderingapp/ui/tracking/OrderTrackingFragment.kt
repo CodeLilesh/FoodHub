@@ -1,45 +1,37 @@
 package com.example.foodorderingapp.ui.tracking
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
-import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.foodorderingapp.R
-import com.example.foodorderingapp.data.model.OrderItem
-import com.example.foodorderingapp.data.socket.SocketConnectionState
+import com.example.foodorderingapp.data.socket.ConnectionState
 import com.example.foodorderingapp.databinding.FragmentOrderTrackingBinding
 import com.example.foodorderingapp.ui.adapters.OrderItemAdapter
-import com.example.foodorderingapp.util.Constants
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.text.NumberFormat
-import java.util.Locale
 
 /**
- * Fragment for tracking a specific order with real-time updates
+ * Fragment for tracking order status in real-time using WebSockets
  */
 @AndroidEntryPoint
 class OrderTrackingFragment : Fragment() {
+
     private var _binding: FragmentOrderTrackingBinding? = null
     private val binding get() = _binding!!
-    
-    private val args: OrderTrackingFragmentArgs by navArgs()
+
     private val viewModel: OrderTrackingViewModel by viewModels()
-    
     private lateinit var orderItemAdapter: OrderItemAdapter
-    
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -48,235 +40,184 @@ class OrderTrackingFragment : Fragment() {
         _binding = FragmentOrderTrackingBinding.inflate(inflater, container, false)
         return binding.root
     }
-    
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
         setupToolbar()
         setupRecyclerView()
-        setupListeners()
-        observeUiState()
+        setupClickListeners()
+        observeState()
     }
-    
+
     private fun setupToolbar() {
         binding.toolbar.setNavigationOnClickListener {
             findNavController().navigateUp()
         }
     }
-    
+
     private fun setupRecyclerView() {
         orderItemAdapter = OrderItemAdapter()
-        binding.rvOrderItems.apply {
+        binding.orderItemsRecyclerView.apply {
             adapter = orderItemAdapter
             layoutManager = LinearLayoutManager(requireContext())
+            isNestedScrollingEnabled = false
         }
     }
-    
-    private fun setupListeners() {
-        // Call restaurant button
-        binding.btnCallRestaurant.setOnClickListener {
-            viewModel.uiState.value.restaurantInfo?.phone?.let { phone ->
-                dialPhoneNumber(phone)
-            }
-        }
-        
-        // Call driver button
-        binding.btnCallDriver.setOnClickListener {
-            viewModel.uiState.value.driverInfo?.phone?.let { phone ->
-                dialPhoneNumber(phone)
-            }
-        }
-        
-        // Cancel order button
-        binding.btnCancelOrder.setOnClickListener {
-            showCancelConfirmationDialog()
+
+    private fun setupClickListeners() {
+        binding.retryButton.setOnClickListener {
+            viewModel.reconnectTracking()
         }
     }
-    
-    private fun observeUiState() {
+
+    private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { state ->
+                viewModel.trackingState.collectLatest { state ->
                     updateLoadingState(state.isLoading)
-                    updateConnectionState(state.connectionState)
+                    updateConnectionStatus(state.connectionState)
+                    updateErrorState(state.hasError, state.error)
                     
-                    state.orderDetails?.let { details ->
-                        updateOrderDetails(details)
-                    }
-                    
-                    state.driverInfo?.let { driver ->
-                        updateDriverInfo(driver)
-                    }
-                    
-                    state.error?.let { error ->
-                        showError(error)
+                    if (!state.isLoading && state.order != null) {
+                        updateOrderInfo(state)
+                        updateOrderStatus(state)
+                        updateOrderItems(state)
                     }
                 }
             }
         }
     }
-    
+
     private fun updateLoadingState(isLoading: Boolean) {
-        binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
-        binding.tvError.visibility = View.GONE
+        binding.loadingProgressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+        binding.orderInfoCard.visibility = if (isLoading) View.GONE else View.VISIBLE
+        binding.orderTimelineCard.visibility = if (isLoading) View.GONE else View.VISIBLE
+        binding.orderItemsCard.visibility = if (isLoading) View.GONE else View.VISIBLE
     }
-    
-    private fun updateConnectionState(state: SocketConnectionState) {
-        when (state) {
-            SocketConnectionState.CONNECTED -> {
-                // Connected state, no UI changes needed
+
+    private fun updateConnectionStatus(connectionState: ConnectionState) {
+        val (text, color, icon) = when (connectionState) {
+            ConnectionState.CONNECTED -> Triple(
+                "Connected - Live Updates",
+                ContextCompat.getColor(requireContext(), R.color.green),
+                R.drawable.ic_connected
+            )
+            ConnectionState.CONNECTING -> Triple(
+                "Connecting...",
+                ContextCompat.getColor(requireContext(), R.color.orange),
+                R.drawable.ic_connecting
+            )
+            ConnectionState.DISCONNECTED -> Triple(
+                "Disconnected",
+                ContextCompat.getColor(requireContext(), R.color.gray),
+                R.drawable.ic_disconnected
+            )
+            ConnectionState.ERROR -> Triple(
+                "Connection Error",
+                ContextCompat.getColor(requireContext(), R.color.red),
+                R.drawable.ic_error
+            )
+        }
+
+        binding.connectionStatusText.text = text
+        binding.connectionStatusText.setTextColor(color)
+        binding.connectionStatusIcon.setImageResource(icon)
+        binding.connectionStatusIcon.setColorFilter(color)
+    }
+
+    private fun updateErrorState(hasError: Boolean, errorMessage: String?) {
+        binding.errorCard.visibility = if (hasError) View.VISIBLE else View.GONE
+        binding.errorMessageText.text = errorMessage ?: "Unknown error occurred"
+    }
+
+    private fun updateOrderInfo(state: OrderTrackingState) {
+        state.order?.let { order ->
+            binding.restaurantNameText.text = order.restaurantName
+            binding.orderIdText.text = "#${order.id}"
+            binding.orderStatusText.text = order.status.replaceFirstChar { it.uppercase() }
+            binding.estimatedTimeText.text = state.estimatedTimeText
+        }
+    }
+
+    private fun updateOrderStatus(state: OrderTrackingState) {
+        // Reset all icons to inactive state
+        resetAllStatusIcons()
+        
+        // Highlight completed phases
+        when (state.currentPhase) {
+            TrackingPhase.ORDER_PLACED -> {
+                setPhaseActive(binding.orderPlacedIcon, binding.orderPlacedLayout)
             }
-            SocketConnectionState.CONNECTING -> {
-                // Show loading state for initial connection
+            TrackingPhase.PREPARING -> {
+                setPhaseActive(binding.orderPlacedIcon, binding.orderPlacedLayout)
+                setPhaseActive(binding.preparingIcon, binding.preparingLayout)
             }
-            SocketConnectionState.DISCONNECTED -> {
-                // Show reconnecting message or subtle indicator
-                Toast.makeText(requireContext(), "Connection lost. Reconnecting...", Toast.LENGTH_SHORT).show()
+            TrackingPhase.READY -> {
+                setPhaseActive(binding.orderPlacedIcon, binding.orderPlacedLayout)
+                setPhaseActive(binding.preparingIcon, binding.preparingLayout)
+                setPhaseActive(binding.readyIcon, binding.readyLayout)
             }
-            SocketConnectionState.ERROR -> {
-                // Show error state
-                binding.tvError.visibility = View.VISIBLE
+            TrackingPhase.ON_THE_WAY -> {
+                setPhaseActive(binding.orderPlacedIcon, binding.orderPlacedLayout)
+                setPhaseActive(binding.preparingIcon, binding.preparingLayout)
+                setPhaseActive(binding.readyIcon, binding.readyLayout)
+                setPhaseActive(binding.onTheWayIcon, binding.onTheWayLayout)
+            }
+            TrackingPhase.DELIVERED -> {
+                setPhaseActive(binding.orderPlacedIcon, binding.orderPlacedLayout)
+                setPhaseActive(binding.preparingIcon, binding.preparingLayout)
+                setPhaseActive(binding.readyIcon, binding.readyLayout)
+                setPhaseActive(binding.onTheWayIcon, binding.onTheWayLayout)
+                setPhaseActive(binding.deliveredIcon, binding.deliveredLayout)
+            }
+            TrackingPhase.CANCELLED -> {
+                binding.orderStatusText.setTextColor(
+                    ContextCompat.getColor(requireContext(), R.color.red)
+                )
+            }
+            TrackingPhase.ERROR -> {
+                // Error state is handled separately
             }
         }
     }
-    
-    private fun updateOrderDetails(details: OrderTrackingDetails) {
-        // Order ID
-        binding.tvOrderId.text = getString(R.string.order_id, details.orderId)
+
+    private fun resetAllStatusIcons() {
+        val grayColor = ContextCompat.getColor(requireContext(), R.color.light_gray)
         
-        // Estimated delivery time
-        val estimatedDelivery = viewModel.formatEstimatedDelivery(details.estimatedDeliveryTime)
-        binding.tvDeliveryTime.text = estimatedDelivery
+        binding.orderPlacedIcon.setImageResource(R.drawable.ic_circle)
+        binding.orderPlacedIcon.setColorFilter(grayColor)
         
-        // Order status indicators
-        updateStatusIndicators(details)
+        binding.preparingIcon.setImageResource(R.drawable.ic_circle)
+        binding.preparingIcon.setColorFilter(grayColor)
         
-        // Order items
-        orderItemAdapter.submitList(details.items)
+        binding.readyIcon.setImageResource(R.drawable.ic_circle)
+        binding.readyIcon.setColorFilter(grayColor)
         
-        // Total price
-        val formatter = NumberFormat.getCurrencyInstance(Locale.US)
-        binding.tvOrderTotal.text = formatter.format(details.totalPrice)
+        binding.onTheWayIcon.setImageResource(R.drawable.ic_circle)
+        binding.onTheWayIcon.setColorFilter(grayColor)
         
-        // Delivery address
-        binding.tvDeliveryAddress.text = details.address
-        
-        // Cancel button visibility
-        binding.btnCancelOrder.isEnabled = details.canBeCancelled
+        binding.deliveredIcon.setImageResource(R.drawable.ic_circle)
+        binding.deliveredIcon.setColorFilter(grayColor)
     }
-    
-    private fun updateStatusIndicators(details: OrderTrackingDetails) {
-        // Order placed
-        updateStatusIndicator(
-            Constants.ORDER_PLACED,
-            binding.statusOrderPlaced,
-            binding.tvOrderPlacedStatus,
-            binding.tvOrderPlacedTime,
-            details
-        )
+
+    private fun setPhaseActive(icon: View, layout: View) {
+        val greenColor = ContextCompat.getColor(requireContext(), R.color.green)
         
-        // Order confirmed
-        updateStatusIndicator(
-            Constants.ORDER_CONFIRMED,
-            binding.statusOrderConfirmed,
-            binding.tvOrderConfirmedStatus,
-            binding.tvOrderConfirmedTime,
-            details
-        )
-        
-        // Order preparing
-        updateStatusIndicator(
-            Constants.ORDER_PREPARING,
-            binding.statusOrderPreparing,
-            binding.tvOrderPreparingStatus,
-            binding.tvOrderPreparingTime,
-            details
-        )
-        
-        // Order out for delivery
-        updateStatusIndicator(
-            Constants.ORDER_OUT_FOR_DELIVERY,
-            binding.statusOrderOutForDelivery,
-            binding.tvOrderOutForDeliveryStatus,
-            binding.tvOrderOutForDeliveryTime,
-            details
-        )
-        
-        // Order delivered
-        updateStatusIndicator(
-            Constants.ORDER_DELIVERED,
-            binding.statusOrderDelivered,
-            binding.tvOrderDeliveredStatus,
-            binding.tvOrderDeliveredTime,
-            details
-        )
-    }
-    
-    private fun updateStatusIndicator(
-        status: String,
-        statusView: View,
-        statusTextView: android.widget.TextView,
-        timeTextView: android.widget.TextView,
-        details: OrderTrackingDetails
-    ) {
-        val isActive = viewModel.isStatusActive(status)
-        val timestamp = details.statusHistory[status]
-        
-        // Update status indicator
-        statusView.setBackgroundResource(
-            if (isActive) R.drawable.bg_status_active else R.drawable.bg_status_inactive
-        )
-        
-        // Update status text style
-        statusTextView.setTypeface(statusTextView.typeface, if (isActive) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
-        
-        // Update timestamp
-        timeTextView.text = if (timestamp != null) {
-            viewModel.formatTime(timestamp)
-        } else {
-            ""
+        if (icon is android.widget.ImageView) {
+            icon.setImageResource(R.drawable.ic_check_circle)
+            icon.setColorFilter(greenColor)
         }
-    }
-    
-    private fun updateDriverInfo(driver: com.example.foodorderingapp.data.model.DriverInfo) {
-        binding.layoutDeliveryPerson.visibility = View.VISIBLE
-        binding.tvDriverName.text = driver.name
-        binding.btnCallDriver.visibility = View.VISIBLE
-    }
-    
-    private fun showError(error: String) {
-        binding.progressBar.visibility = View.GONE
-        binding.tvError.visibility = View.VISIBLE
-        binding.tvError.text = error
         
-        Toast.makeText(requireContext(), error, Toast.LENGTH_SHORT).show()
+        // Also set the text color to active
+        val textView = (layout as? ViewGroup)?.getChildAt(1) as? android.widget.TextView
+        textView?.setTextColor(ContextCompat.getColor(requireContext(), R.color.black))
     }
-    
-    private fun dialPhoneNumber(phoneNumber: String) {
-        val intent = Intent(Intent.ACTION_DIAL).apply {
-            data = Uri.parse("tel:$phoneNumber")
-        }
-        if (intent.resolveActivity(requireActivity().packageManager) != null) {
-            startActivity(intent)
-        } else {
-            Toast.makeText(requireContext(), "Cannot make calls from this device", Toast.LENGTH_SHORT).show()
-        }
+
+    private fun updateOrderItems(state: OrderTrackingState) {
+        orderItemAdapter.submitList(state.orderItems)
     }
-    
-    private fun showCancelConfirmationDialog() {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Cancel Order")
-            .setMessage("Are you sure you want to cancel this order? This action cannot be undone.")
-            .setNegativeButton("No") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .setPositiveButton("Yes") { dialog, _ ->
-                dialog.dismiss()
-                viewModel.cancelOrder()
-            }
-            .show()
-    }
-    
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null

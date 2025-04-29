@@ -1,71 +1,72 @@
 package com.example.foodorderingapp.ui.tracking
 
-import com.example.foodorderingapp.data.model.DriverInfo
-import com.example.foodorderingapp.data.model.OrderItem
-import com.example.foodorderingapp.data.model.OrderStatusHistory
-import com.example.foodorderingapp.data.model.RestaurantInfo
-import com.example.foodorderingapp.data.socket.SocketConnectionState
-import java.util.Date
+import com.example.foodorderingapp.data.models.Order
+import com.example.foodorderingapp.data.models.OrderItem
+import com.example.foodorderingapp.data.socket.ConnectionState
+import com.example.foodorderingapp.data.socket.OrderStatus
 
 /**
- * Represents the UI state for the OrderTrackingFragment
+ * State class for the Order Tracking screen
+ * Handles different UI states: loading, error, and connected with live updates
  */
-data class OrderTrackingUIState(
-    val isLoading: Boolean = false,
-    val orderDetails: OrderTrackingDetails? = null,
-    val driverInfo: DriverInfo? = null,
-    val restaurantInfo: RestaurantInfo? = null,
-    val connectionState: SocketConnectionState = SocketConnectionState.DISCONNECTED,
+data class OrderTrackingState(
+    val isLoading: Boolean = true,
+    val order: Order? = null,
+    val orderItems: List<OrderItem> = emptyList(),
+    val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
+    val orderStatus: OrderStatus = OrderStatus.UNKNOWN,
+    val estimatedDeliveryTimeMinutes: Int = -1,
+    val statusMessage: String = "",
     val error: String? = null
-)
-
-/**
- * Represents the detailed information about an order
- */
-data class OrderTrackingDetails(
-    val orderId: String,
-    val status: String,
-    val items: List<OrderItem>,
-    val totalPrice: Double,
-    val address: String,
-    val createdAt: Date,
-    val estimatedDeliveryTime: Date?,
-    val statusHistory: Map<String, Date?> // maps status to timestamp
 ) {
-    // Helper properties for UI
-    val hasDriverAssigned: Boolean
-        get() = status == "OUT_FOR_DELIVERY" || status == "DELIVERED"
-
-    val canBeCancelled: Boolean
-        get() = status != "DELIVERED" && status != "CANCELLED"
-
-    // Get formatted timestamp for a specific status
-    fun getStatusTimestamp(status: String): String? {
-        return statusHistory[status]?.toString()
-    }
+    /**
+     * Returns the current phase of the order in the delivery process
+     * Used to highlight the current step in the tracking UI
+     */
+    val currentPhase: TrackingPhase
+        get() = when (orderStatus) {
+            OrderStatus.RECEIVED -> TrackingPhase.ORDER_PLACED
+            OrderStatus.PREPARING -> TrackingPhase.PREPARING
+            OrderStatus.READY -> TrackingPhase.READY
+            OrderStatus.PICKED_UP, OrderStatus.IN_TRANSIT -> TrackingPhase.ON_THE_WAY
+            OrderStatus.DELIVERED -> TrackingPhase.DELIVERED
+            OrderStatus.CANCELLED -> TrackingPhase.CANCELLED
+            OrderStatus.UNKNOWN -> if (error != null) TrackingPhase.ERROR else TrackingPhase.ORDER_PLACED
+        }
+    
+    /**
+     * Returns true if the app is currently connected to the WebSocket
+     */
+    val isConnected: Boolean
+        get() = connectionState == ConnectionState.CONNECTED
+    
+    /**
+     * Returns a formatted estimated delivery time string
+     */
+    val estimatedTimeText: String
+        get() = if (estimatedDeliveryTimeMinutes > 0) {
+            "$estimatedDeliveryTimeMinutes minutes"
+        } else {
+            "Calculating..."
+        }
+    
+    /**
+     * Returns true if there was an error connecting to the WebSocket or fetching the order
+     */
+    val hasError: Boolean
+        get() = error != null || connectionState == ConnectionState.ERROR
 }
 
 /**
- * Factory to convert from API/WebSocket model to UI model
+ * Enum representing the different phases of order tracking
+ * Used to control the UI state of the tracking screen
  */
-object OrderTrackingDetailsFactory {
-    fun fromTrackingResponse(
-        response: com.example.foodorderingapp.data.model.OrderTrackingResponse
-    ): OrderTrackingDetails {
-        // Create status history map from status history list
-        val statusHistoryMap = response.statusHistory.associate { 
-            it.status to it.timestamp 
-        }
-        
-        return OrderTrackingDetails(
-            orderId = response.id,
-            status = response.status,
-            items = response.items,
-            totalPrice = response.total,
-            address = response.address,
-            createdAt = response.createdAt,
-            estimatedDeliveryTime = response.estimatedDeliveryTime,
-            statusHistory = statusHistoryMap
-        )
-    }
+enum class TrackingPhase {
+    ORDER_PLACED,
+    PREPARING,
+    READY,
+    ON_THE_WAY,
+    DELIVERED,
+    CANCELLED,
+    ERROR
 }

@@ -1,114 +1,166 @@
 package com.example.foodorderingapp.api
 
-import com.example.foodorderingapp.data.model.MenuItem
-import com.example.foodorderingapp.data.model.Order
-import com.example.foodorderingapp.data.model.Restaurant
-import com.example.foodorderingapp.data.model.User
+import com.example.foodorderingapp.data.model.OrderTrackingResponse
+import com.example.foodorderingapp.util.Constants
 import retrofit2.Response
 import retrofit2.http.*
 
+/**
+ * Retrofit API service interface for network requests
+ */
 interface ApiService {
-    // Authentication
-    @FormUrlEncoded
-    @POST("auth/login")
+    /**
+     * User login endpoint
+     */
+    @POST(Constants.LOGIN_ENDPOINT)
     suspend fun login(
-        @Field("email") email: String,
-        @Field("password") password: String
+        @Body loginRequest: HashMap<String, String>
     ): Response<LoginResponse>
-    
-    @FormUrlEncoded
-    @POST("auth/register")
+
+    /**
+     * User registration endpoint
+     */
+    @POST(Constants.REGISTER_ENDPOINT)
     suspend fun register(
-        @Field("name") name: String,
-        @Field("email") email: String,
-        @Field("password") password: String,
-        @Field("phone") phone: String,
-        @Field("address") address: String?
+        @Body registerRequest: HashMap<String, String>
     ): Response<RegisterResponse>
-    
-    @POST("auth/logout")
-    suspend fun logout(): Response<LogoutResponse>
-    
-    // User
-    @GET("users/profile")
-    suspend fun getUserProfile(): Response<User>
-    
-    @FormUrlEncoded
-    @PUT("users/profile")
-    suspend fun updateUserProfile(
-        @Field("name") name: String,
-        @Field("phone") phone: String,
-        @Field("address") address: String?
-    ): Response<User>
-    
-    // Restaurants
-    @GET("restaurants")
+
+    /**
+     * Get list of restaurants endpoint
+     */
+    @GET(Constants.RESTAURANTS_ENDPOINT)
     suspend fun getRestaurants(
-        @Query("page") page: Int? = null,
-        @Query("limit") limit: Int? = null,
-        @Query("category") category: String? = null,
-        @Query("query") searchQuery: String? = null
+        @Header("Authorization") token: String
     ): Response<List<Restaurant>>
-    
-    @GET("restaurants/{id}")
-    suspend fun getRestaurant(
+
+    /**
+     * Get restaurant menu items endpoint
+     */
+    @GET(Constants.RESTAURANT_MENU_ENDPOINT)
+    suspend fun getRestaurantMenu(
+        @Header("Authorization") token: String,
         @Path("id") restaurantId: String
-    ): Response<Restaurant>
-    
-    // Menu Items
-    @GET("menuItems")
-    suspend fun getMenuItems(
-        @Query("restaurantId") restaurantId: String,
-        @Query("category") category: String? = null,
-        @Query("query") searchQuery: String? = null
     ): Response<List<MenuItem>>
-    
-    @GET("menuItems/{id}")
-    suspend fun getMenuItem(
-        @Path("id") menuItemId: String
-    ): Response<MenuItem>
-    
-    // Orders
-    @GET("orders")
-    suspend fun getOrders(): Response<List<Order>>
-    
-    @GET("orders/{id}")
-    suspend fun getOrder(
+
+    /**
+     * Place a new order endpoint
+     */
+    @POST(Constants.ORDERS_ENDPOINT)
+    suspend fun placeOrder(
+        @Header("Authorization") token: String,
+        @Body orderRequest: PlaceOrderRequest
+    ): Response<Order>
+
+    /**
+     * Get order details endpoint
+     */
+    @GET(Constants.ORDER_DETAILS_ENDPOINT)
+    suspend fun getOrderDetails(
+        @Header("Authorization") token: String,
         @Path("id") orderId: String
     ): Response<Order>
-    
-    @POST("orders")
-    suspend fun createOrder(
-        @Body orderRequest: CreateOrderRequest
-    ): Response<Order>
+
+    /**
+     * Get order tracking details endpoint
+     */
+    @GET(Constants.ORDER_TRACKING_ENDPOINT)
+    suspend fun getOrderTracking(
+        @Header("Authorization") token: String,
+        @Path("id") orderId: String
+    ): Response<OrderTrackingResponse>
+
+    /**
+     * Get user orders history endpoint
+     */
+    @GET(Constants.USER_ORDERS_ENDPOINT)
+    suspend fun getUserOrders(
+        @Header("Authorization") token: String
+    ): Response<List<Order>>
+
+    /**
+     * Get user profile endpoint
+     */
+    @GET(Constants.USER_PROFILE_ENDPOINT)
+    suspend fun getUserProfile(
+        @Header("Authorization") token: String
+    ): Response<User>
+
+    /**
+     * Cancel an order endpoint
+     */
+    @POST("${Constants.ORDERS_ENDPOINT}/{id}/cancel")
+    suspend fun cancelOrder(
+        @Header("Authorization") token: String,
+        @Path("id") orderId: String
+    ): Response<Void>
 }
 
-// Response and Request data classes
+// Response models (these would be defined in their own files in a real project)
 data class LoginResponse(
     val token: String,
-    val user: User
+    val userId: String,
+    val name: String,
+    val email: String
 )
 
 data class RegisterResponse(
     val token: String,
-    val user: User
+    val userId: String,
+    val name: String,
+    val email: String
 )
 
-data class LogoutResponse(
-    val message: String
+data class Restaurant(
+    val id: String,
+    val name: String,
+    val description: String,
+    val category: String,
+    val image: String,
+    val rating: Float,
+    val address: String,
+    val phone: String
 )
 
-data class CreateOrderRequest(
+data class MenuItem(
+    val id: String,
+    val name: String,
+    val description: String,
+    val price: Double,
+    val image: String,
+    val category: String,
+    val restaurantId: String,
+    val isAvailable: Boolean
+)
+
+data class PlaceOrderRequest(
     val restaurantId: String,
     val items: List<OrderItemRequest>,
-    val deliveryAddress: String,
-    val contactPhone: String,
-    val paymentMethod: String,
-    val notes: String?
+    val totalPrice: Double,
+    val address: String,
+    val paymentMethod: String
 )
 
 data class OrderItemRequest(
     val menuItemId: String,
     val quantity: Int,
-    val specialInstructions: String?
+    val price: Double
+)
+
+data class Order(
+    val id: String,
+    val userId: String,
+    val restaurantId: String,
+    val items: List<com.example.foodorderingapp.data.model.OrderItem>,
+    val totalPrice: Double,
+    val status: String,
+    val address: String,
+    val paymentMethod: String,
+    val createdAt: String
+)
+
+data class User(
+    val id: String,
+    val name: String,
+    val email: String,
+    val phone: String?
 )
